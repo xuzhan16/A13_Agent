@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Career Planning Agent Demo</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Service Outsourcing Competition Demo</p>
+        <h1>大学生职业规划智能体</h1>
+        <p class="hero-copy">
+          基于真实岗位数据、岗位路径图谱、学生画像和 Agent 闭环追问的职业规划演示台。
+        </p>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span>知识库岗位族</span>
+          <strong id="heroJobCount">10</strong>
+        </div>
+        <div class="hero-stat">
+          <span>图谱节点</span>
+          <strong id="heroGraphNodes">37</strong>
+        </div>
+        <div class="hero-stat accent">
+          <span>当前模式</span>
+          <strong id="heroMode">Rule</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel">
+        <section class="panel-card">
+          <div class="section-head">
+            <h2>1. 简历解析</h2>
+            <button id="parseResumeBtn" class="ghost-btn">解析文件</button>
+          </div>
+          <input id="resumeFile" type="file" accept=".txt,.md,.markdown,.docx" />
+          <div id="resumeParseMeta" class="inline-note">支持 txt / md / docx</div>
+          <div id="resumePreview" class="code-preview">尚未解析简历文件</div>
+        </section>
+
+        <section class="panel-card">
+          <div class="section-head">
+            <h2>2. 学生信息</h2>
+            <button id="loadSampleBtn" class="ghost-btn">加载示例</button>
+          </div>
+          <div class="form-grid two-col">
+            <label><span>姓名</span><input id="name" type="text" placeholder="如：李华" /></label>
+            <label><span>学校</span><input id="school" type="text" placeholder="如：某理工大学" /></label>
+            <label><span>专业</span><input id="major" type="text" placeholder="如：软件工程" /></label>
+            <label><span>学历</span><input id="degree" type="text" placeholder="如：本科" /></label>
+            <label><span>毕业年份</span><input id="graduationYear" type="number" placeholder="2026" /></label>
+          </div>
+          <div class="form-grid">
+            <label><span>目标岗位（逗号分隔）</span><input id="targetRoles" type="text" placeholder="Java开发工程师, 软件测试工程师" /></label>
+            <label><span>目标城市（逗号分隔）</span><input id="targetCities" type="text" placeholder="深圳, 上海" /></label>
+            <label><span>期望行业（逗号分隔）</span><input id="desiredIndustries" type="text" placeholder="互联网, 计算机软件" /></label>
+            <label><span>自我描述</span><textarea id="selfDescription" rows="3" placeholder="请概述你的优势、偏好和风格"></textarea></label>
+          </div>
+        </section>
+
+        <section class="panel-card">
+          <h2>3. 经验与技能</h2>
+          <div class="form-grid">
+            <label><span>简历文本</span><textarea id="resumeText" rows="6" placeholder="可手动粘贴简历全文，也可先解析文件"></textarea></label>
+            <label><span>手动技能（逗号分隔）</span><input id="manualSkills" type="text" placeholder="Java, Spring Boot, MySQL" /></label>
+            <label><span>项目经历（每行一条）</span><textarea id="projectExperiences" rows="4" placeholder="校园管理系统：负责后端接口设计和权限模块开发"></textarea></label>
+            <label><span>实习经历（每行一条）</span><textarea id="internshipExperiences" rows="4" placeholder="某科技公司：参与企业管理系统开发与测试联调"></textarea></label>
+            <label><span>校园经历（每行一条）</span><textarea id="campusExperiences" rows="3" placeholder="技术社团负责人，组织开发训练营"></textarea></label>
+            <label><span>证书（逗号分隔）</span><input id="certificates" type="text" placeholder="英语四级, 软考中级" /></label>
+            <label><span>追问回答（每行一条，格式：问题：答案）</span><textarea id="followUpAnswers" rows="4" placeholder="你更偏向什么岗位：希望优先做后端开发"></textarea></label>
+          </div>
+        </section>
+
+        <section class="panel-card actions-card">
+          <h2>4. Agent 操作</h2>
+          <div class="button-row">
+            <button id="followUpBtn" class="secondary-btn">生成追问</button>
+            <button id="generateBtn" class="primary-btn">生成职业报告</button>
+          </div>
+          <div class="button-row compact">
+            <button id="downloadMarkdownBtn" class="ghost-btn">导出 Markdown</button>
+            <button id="downloadJsonBtn" class="ghost-btn">导出 JSON</button>
+          </div>
+          <div id="statusBar" class="status-bar">准备就绪</div>
+        </section>
+      </aside>
+
+      <section class="result-panel">
+        <div class="result-grid top-metrics">
+          <article class="metric-card">
+            <span>知识库来源</span>
+            <strong id="metricKnowledgeSource">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>画像模式</span>
+            <strong id="metricProfileMode">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>报告模式</span>
+            <strong id="metricReportMode">-</strong>
+          </article>
+          <article class="metric-card highlight">
+            <span>Top1 岗位</span>
+            <strong id="metricTopJob">-</strong>
+          </article>
+        </div>
+
+        <div class="result-grid two-col-results">
+          <section class="result-card">
+            <div class="section-head">
+              <h2>Agent 追问</h2>
+              <span id="questionCount" class="badge">0</span>
+            </div>
+            <div id="followUpContainer" class="stack-list empty-state">先点击“生成追问”</div>
+          </section>
+
+          <section class="result-card">
+            <div class="section-head">
+              <h2>岗位匹配结果</h2>
+              <span class="badge">Top 3</span>
+            </div>
+            <div id="matchContainer" class="stack-list empty-state">先生成职业报告</div>
+          </section>
+        </div>
+
+        <section class="result-card graph-card">
+          <div class="section-head">
+            <h2>岗位图谱</h2>
+            <div class="legend">
+              <span><i class="dot dot-job"></i>岗位族</span>
+              <span><i class="dot dot-stage"></i>职业阶段</span>
+              <span><i class="line line-vertical"></i>纵向路径</span>
+              <span><i class="line line-transfer"></i>换岗路径</span>
+            </div>
+          </div>
+          <svg id="graphSvg" class="graph-canvas" viewBox="0 0 1100 620" preserveAspectRatio="xMidYMid meet"></svg>
+        </section>
+
+        <section class="result-card report-card">
+          <div class="section-head">
+            <h2>职业规划报告</h2>
+            <span id="reportModeBadge" class="badge">template</span>
+          </div>
+          <div id="executiveSummary" class="executive-summary">先生成职业报告</div>
+          <div id="reportPreview" class="report-preview empty-state">报告预览将在这里显示</div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+import json
+from typing import Optional
+
+from backend.app.infra.json_utils import try_parse_json
+from backend.app.infra.llm.base import LLMClient
+from backend.app.prompts.templates import STUDENT_PROFILE_SYSTEM_PROMPT
+from backend.app.repositories.knowledge_repository import KnowledgeRepository
+from backend.app.schemas.common import EvidenceItem
+from backend.app.schemas.student import StudentIntakeRequest, StudentProfile
+
+
+class StudentProfilerService:
+    def __init__(
+        self,
+        repository: KnowledgeRepository,
+        llm_client: Optional[LLMClient] = None,
+    ) -> None:
+        self.repository = repository
+        self.llm_client = llm_client
+
+    def build_profile(self, intake: StudentIntakeRequest) -> StudentProfile:
+        corpus = self._build_corpus(intake)
+        rule_hard_skills = self._extract_keywords(corpus, self.repository.get_skill_lexicon())
+        rule_soft_skills = self._extract_keywords(corpus, self.repository.get_soft_skill_lexicon())
+        llm_payload = self._extract_with_llm(intake)
+
+        hard_skills = self._merge_terms(
+            rule_hard_skills,
+            intake.manual_skills,
+            self._filter_allowed(llm_payload.get('hard_skills', []), self.repository.get_skill_lexicon()),
+        )
+        soft_skills = self._merge_terms(
+            rule_soft_skills,
+            self._filter_allowed(llm_payload.get('soft_skills', []), self.repository.get_soft_skill_lexicon()),
+        )
+        certificates = self._merge_terms(intake.certificates, llm_payload.get('certificates', []))
+
+        completeness_score = self._compute_completeness(intake)
+        competitiveness_score = self._compute_competitiveness(
+            hard_skill_count=len(hard_skills),
+            soft_skill_count=len(soft_skills),
+            project_count=len(intake.project_experiences),
+            internship_count=len(intake.internship_experiences),
+            certificate_count=len(certificates),
+        )
+
+        inferred_strengths = self._merge_terms(
+            self._build_strengths(hard_skills, soft_skills, intake),
+            llm_payload.get('inferred_strengths', []),
+        )
+        inferred_gaps = self._merge_terms(
+            self._build_gaps(hard_skills, intake),
+            llm_payload.get('inferred_gaps', []),
+        )
+        missing_dimensions = self._build_missing_dimensions(intake, hard_skills, soft_skills, certificates)
+        evidences = self._build_evidences(intake, llm_payload)
+        summary = llm_payload.get('summary', '') or self._build_summary(hard_skills, soft_skills, intake)
+
+        return StudentProfile(
+            basic_info=intake.basic_info,
+            preference=intake.preference,
+            hard_skills=hard_skills,
+            soft_skills=soft_skills,
+            certificates=certificates,
+            inferred_strengths=inferred_strengths,
+            inferred_gaps=inferred_gaps,
+            missing_dimensions=missing_dimensions,
+            project_count=len(intake.project_experiences),
+            internship_count=len(intake.internship_experiences),
+            campus_count=len(intake.campus_experiences),
+            completeness_score=completeness_score,
+            competitiveness_score=competitiveness_score,
+            evidences=evidences,
+            profile_source='llm_augmented' if llm_payload else 'rule_based',
+            summary=summary,
+        )
+
+    @staticmethod
+    def _build_corpus(intake: StudentIntakeRequest) -> str:
+        items = [
+            intake.resume_text,
+            intake.self_description,
+            intake.basic_info.major,
+            ' '.join(intake.manual_skills),
+            ' '.join(intake.project_experiences),
+            ' '.join(intake.internship_experiences),
+            ' '.join(intake.campus_experiences),
+            ' '.join(intake.certificates),
+            ' '.join(answer.answer for answer in intake.follow_up_answers),
+        ]
+        return ' '.join(item for item in items if item).lower()
+
+    @staticmethod
+    def _extract_keywords(corpus: str, lexicon: list[str]) -> list[str]:
+        matched = [item for item in lexicon if item.lower() in corpus]
+        return sorted(set(matched))
+
+    @staticmethod
+    def _compute_completeness(intake: StudentIntakeRequest) -> float:
+        parts = [
+            bool(intake.resume_text.strip()),
+            bool(intake.self_description.strip()),
+            bool(intake.manual_skills),
+            bool(intake.project_experiences),
+            bool(intake.internship_experiences),
+            bool(intake.campus_experiences),
+            bool(intake.certificates),
+            bool(intake.follow_up_answers),
+        ]
+        return round(sum(1 for item in parts if item) / len(parts) * 100, 1)
+
+    @staticmethod
+    def _compute_competitiveness(
+        hard_skill_count: int,
+        soft_skill_count: int,
+        project_count: int,
+        internship_count: int,
+        certificate_count: int,
+    ) -> float:
+        raw = (
+            min(hard_skill_count, 8) * 6
+            + min(soft_skill_count, 4) * 5
+            + min(project_count, 3) * 10
+            + min(internship_count, 2) * 12
+            + min(certificate_count, 3) * 6
+        )
+        return round(min(raw, 100), 1)
+
+    @staticmethod
+    def _build_strengths(
+        hard_skills: list[str],
+        soft_skills: list[str],
+        intake: StudentIntakeRequest,
+    ) -> list[str]:
+        strengths: list[str] = []
+        if hard_skills:
+            strengths.append('已有较明确的技能栈基础')
+        if len(intake.project_experiences) >= 1:
+            strengths.append('具备项目实践经历')
+        if len(intake.internship_experiences) >= 1:
+            strengths.append('具备真实职场场景经历')
+        if '学习能力' in soft_skills:
+            strengths.append('学习与适应能力较强')
+        if intake.preference.target_roles:
+            strengths.append('已有较明确的岗位目标')
+        return strengths or ['待进一步访谈补全优势画像']
+
+    @staticmethod
+    def _build_gaps(hard_skills: list[str], intake: StudentIntakeRequest) -> list[str]:
+        gaps: list[str] = []
+        if len(hard_skills) < 3:
+            gaps.append('硬技能证据偏少')
+        if not intake.project_experiences:
+            gaps.append('缺少可展示项目经历')
+        if not intake.internship_experiences:
+            gaps.append('缺少实习或真实业务场景证明')
+        if not intake.certificates:
+            gaps.append('证书与标准化证明材料较少')
+        if not intake.preference.target_roles:
+            gaps.append('目标岗位尚不明确')
+        return gaps
+
+    @staticmethod
+    def _build_missing_dimensions(
+        intake: StudentIntakeRequest,
+        hard_skills: list[str],
+        soft_skills: list[str],
+        certificates: list[str],
+    ) -> list[str]:
+        missing: list[str] = []
+        if len(hard_skills) < 3:
+            missing.append('硬技能')
+        if len(soft_skills) < 2:
+            missing.append('职业素养')
+        if not intake.project_experiences:
+            missing.append('项目经历')
+        if not intake.internship_experiences:
+            missing.append('实习经历')
+        if not certificates:
+            missing.append('证书证明')
+        if not intake.preference.target_roles:
+            missing.append('职业意向')
+        if not intake.preference.target_cities:
+            missing.append('城市偏好')
+        return missing
+
+    @staticmethod
+    def _build_evidences(intake: StudentIntakeRequest, llm_payload: dict) -> list[EvidenceItem]:
+        evidences: list[EvidenceItem] = []
+        if intake.resume_text.strip():
+            evidences.append(EvidenceItem(source='resume_text', excerpt=intake.resume_text[:160]))
+        for item in intake.project_experiences[:2]:
+            evidences.append(EvidenceItem(source='project', excerpt=item[:160]))
+        for item in intake.internship_experiences[:2]:
+            evidences.append(EvidenceItem(source='internship', excerpt=item[:160]))
+        for item in llm_payload.get('evidences', [])[:2]:
+            if isinstance(item, str) and item.strip():
+                evidences.append(EvidenceItem(source='llm_extracted', excerpt=item[:160]))
+        return evidences[:5]
+
+    @staticmethod
+    def _build_summary(
+        hard_skills: list[str],
+        soft_skills: list[str],
+        intake: StudentIntakeRequest,
+    ) -> str:
+        return (
+            f'当前已识别 {len(hard_skills)} 项硬技能、{len(soft_skills)} 项软素质，'
+            f'包含 {len(intake.project_experiences)} 段项目经历和 {len(intake.internship_experiences)} 段实习经历。'
+        )
+
+    @staticmethod
+    def _merge_terms(*groups: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for group in groups:
+            for item in group:
+                text = str(item).strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                result.append(text)
+        return result
+
+    @staticmethod
+    def _filter_allowed(items: list[str], allowed_terms: list[str]) -> list[str]:
+        allowed = {item.lower(): item for item in allowed_terms}
+        result: list[str] = []
+        for item in items:
+            normalized = str(item).strip().lower()
+            if normalized in allowed:
+                result.append(allowed[normalized])
+        return result
+
+    def _extract_with_llm(self, intake: StudentIntakeRequest) -> dict:
+        if self.llm_client is None or not self.llm_client.enabled:
+            return {}
+
+        prompt = self._build_llm_prompt(intake)
+        try:
+            raw_text = self.llm_client.generate(prompt=prompt, system_prompt=STUDENT_PROFILE_SYSTEM_PROMPT)
+        except Exception:
+            return {}
+
+        payload = try_parse_json(raw_text)
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _build_llm_prompt(intake: StudentIntakeRequest) -> str:
+        payload = {
+            'basic_info': intake.basic_info.dict(),
+            'preference': intake.preference.dict(),
+            'resume_text': intake.resume_text,
+            'self_description': intake.self_description,
+            'manual_skills': intake.manual_skills,
+            'project_experiences': intake.project_experiences,
+            'internship_experiences': intake.internship_experiences,
+            'campus_experiences': intake.campus_experiences,
+            'certificates': intake.certificates,
+            'follow_up_answers': [item.dict() for item in intake.follow_up_answers],
+        }
+        return (
+            '请从以下学生资料中抽取结构化画像，并仅返回 JSON。'
+            'JSON 字段必须包含 hard_skills、soft_skills、certificates、inferred_strengths、inferred_gaps、evidences、summary。\n'
+            f'{json.dumps(payload, ensure_ascii=False)}'
+        )

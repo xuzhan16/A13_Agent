@@ -1,0 +1,75 @@
+from typing import List
+
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
+
+from backend.app.agents.orchestrator import CareerPlanningOrchestrator
+from backend.app.dependencies import get_orchestrator, get_repository, get_resume_parser
+from backend.app.repositories.knowledge_repository import KnowledgeRepository
+from backend.app.schemas.graph import JobGraph
+from backend.app.schemas.job import JobRequirementProfile
+from backend.app.schemas.planning import (
+    CareerPlanningRequest,
+    CareerPlanningResponse,
+    FollowUpQuestionRequest,
+    FollowUpQuestionResponse,
+)
+from backend.app.schemas.resume import ResumeParseResponse
+from backend.app.services.resume_parser import ResumeParserService
+
+router = APIRouter()
+
+
+@router.get('/job-families', response_model=List[JobRequirementProfile])
+def list_job_families(
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> List[JobRequirementProfile]:
+    return repository.list_job_families()
+
+
+@router.get('/job-graph', response_model=JobGraph)
+def get_job_graph(
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> JobGraph:
+    return repository.get_job_graph()
+
+
+@router.post('/resume/parse', response_model=ResumeParseResponse)
+async def parse_resume(
+    file: UploadFile = File(...),
+    parser: ResumeParserService = Depends(get_resume_parser),
+) -> ResumeParseResponse:
+    content = await file.read()
+    return parser.parse(file_name=file.filename or 'resume.txt', content=content)
+
+
+@router.post('/follow-up-questions', response_model=FollowUpQuestionResponse)
+def generate_follow_up_questions(
+    request: FollowUpQuestionRequest,
+    orchestrator: CareerPlanningOrchestrator = Depends(get_orchestrator),
+) -> FollowUpQuestionResponse:
+    return orchestrator.suggest_follow_up_questions(request)
+
+
+@router.post('/report', response_model=CareerPlanningResponse)
+def generate_report(
+    request: CareerPlanningRequest,
+    orchestrator: CareerPlanningOrchestrator = Depends(get_orchestrator),
+) -> CareerPlanningResponse:
+    return orchestrator.run(request)
+
+
+@router.post('/report/export-markdown')
+def export_report_markdown(
+    request: CareerPlanningRequest,
+    orchestrator: CareerPlanningOrchestrator = Depends(get_orchestrator),
+) -> Response:
+    response = orchestrator.run(request)
+    student_name = response.student_profile.basic_info.name or 'student'
+    ascii_stem = ''.join(ch for ch in student_name if ch.isascii() and (ch.isalnum() or ch in '-_')).strip('_-')
+    file_name = f'{ascii_stem or "student"}_career_report.md'
+    return Response(
+        content=response.report.report_markdown,
+        media_type='text/markdown; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="{file_name}"'},
+    )
