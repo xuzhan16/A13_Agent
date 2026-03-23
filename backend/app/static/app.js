@@ -3,6 +3,7 @@ const state = {
   lastRequest: null,
   lastReportResponse: null,
   parsedResumeText: '',
+  selectedMatchIndex: 0,
 };
 
 const DEMO_SAMPLE = {
@@ -43,6 +44,16 @@ const els = {
   executiveSummary: document.getElementById('executiveSummary'),
   reportPreview: document.getElementById('reportPreview'),
   reportModeBadge: document.getElementById('reportModeBadge'),
+  evidenceMatchName: document.getElementById('evidenceMatchName'),
+  evidenceEmpty: document.getElementById('evidenceEmpty'),
+  evidenceTracePanel: document.getElementById('evidenceTracePanel'),
+  evidenceScore: document.getElementById('evidenceScore'),
+  evidenceFormula: document.getElementById('evidenceFormula'),
+  evidenceRuleVersion: document.getElementById('evidenceRuleVersion'),
+  evidenceKbVersion: document.getElementById('evidenceKbVersion'),
+  evidenceDimensionList: document.getElementById('evidenceDimensionList'),
+  evidenceRawCount: document.getElementById('evidenceRawCount'),
+  evidenceRawList: document.getElementById('evidenceRawList'),
 };
 
 function setStatus(message, mode = 'info') {
@@ -170,18 +181,24 @@ function renderFollowUps(questions) {
 function renderMatches(matches) {
   if (!matches?.length) {
     els.matchContainer.className = 'stack-list empty-state';
-    els.matchContainer.textContent = '暂无匹配结果';
+    els.matchContainer.textContent = 'No matches yet';
     return;
   }
+  if (state.selectedMatchIndex >= matches.length) {
+    state.selectedMatchIndex = 0;
+  }
   els.matchContainer.className = 'stack-list';
-  els.matchContainer.innerHTML = matches.map((item) => `
-    <article class="match-card">
-      <span class="match-score">匹配度 ${item.overall_score}</span>
+  els.matchContainer.innerHTML = matches.map((item, index) => `
+    <article class="match-card ${index === state.selectedMatchIndex ? 'active' : ''}">
+      <span class="match-score">??? ${item.overall_score}</span>
       <h3>${escapeHtml(item.job_family)}</h3>
       <p>${escapeHtml(item.summary)}</p>
       <div class="skill-pills">
         ${(item.matched_skills || []).slice(0, 4).map((skill) => `<span class="pill">${escapeHtml(skill)}</span>`).join('')}
-        ${(item.missing_skills || []).slice(0, 3).map((skill) => `<span class="pill warn">待补：${escapeHtml(skill)}</span>`).join('')}
+        ${(item.missing_skills || []).slice(0, 3).map((skill) => `<span class="pill warn">???${escapeHtml(skill)}</span>`).join('')}
+      </div>
+      <div class="match-actions">
+        <button class="ghost-btn evidence-btn" data-match-index="${index}">View Evidence</button>
       </div>
     </article>
   `).join('');
@@ -247,15 +264,112 @@ function markdownToHtml(markdown) {
 
 function renderReport(report) {
   if (!report) {
-    els.executiveSummary.textContent = '先生成职业报告';
+    els.executiveSummary.textContent = 'Generate a report first';
     els.reportPreview.className = 'report-preview empty-state';
-    els.reportPreview.textContent = '报告预览将在这里显示';
+    els.reportPreview.textContent = 'Report preview will appear here';
     return;
   }
-  els.executiveSummary.textContent = report.executive_summary || report.overview || '暂无执行摘要';
+  els.executiveSummary.textContent = report.executive_summary || report.overview || 'No executive summary';
   els.reportModeBadge.textContent = report.generation_mode || 'template';
   els.reportPreview.className = 'report-preview';
   els.reportPreview.innerHTML = markdownToHtml(report.report_markdown);
+}
+
+function renderEvidenceTrace(match) {
+  const trace = match?.evidence_trace;
+  if (!trace) {
+    els.evidenceMatchName.textContent = 'No match selected';
+    els.evidenceEmpty.classList.remove('hidden');
+    els.evidenceTracePanel.classList.add('hidden');
+    els.evidenceDimensionList.innerHTML = '';
+    els.evidenceRawList.innerHTML = '';
+    els.evidenceRawCount.textContent = '0';
+    return;
+  }
+
+  els.evidenceMatchName.textContent = match.job_family || 'Untitled match';
+  els.evidenceScore.textContent = `${trace.final_score?.display_score ?? '-'} pts`;
+  els.evidenceFormula.textContent = trace.final_score?.formula || '-';
+  els.evidenceRuleVersion.textContent = trace.versions?.score_rule_version || '-';
+  els.evidenceKbVersion.textContent = trace.versions?.knowledge_base_version || '-';
+  els.evidenceEmpty.classList.add('hidden');
+  els.evidenceTracePanel.classList.remove('hidden');
+
+  const dimensions = trace.dimensions || [];
+  els.evidenceDimensionList.innerHTML = dimensions.map((dimension) => `
+    <article class="dimension-trace-card">
+      <div class="dimension-trace-head">
+        <div>
+          <h3>${escapeHtml(dimension.name)}</h3>
+          <p>${escapeHtml(dimension.formula || 'n/a')}</p>
+        </div>
+        <div class="dimension-score-box">
+          <strong>${escapeHtml(dimension.score)}</strong>
+          <span>Contribution ${escapeHtml(dimension.weighted_score)}</span>
+        </div>
+      </div>
+      <div class="dimension-bar"><span style="width: ${Math.max(6, Math.min(Number(dimension.score) || 0, 100))}%"></span></div>
+      <div class="indicator-trace-list">
+        ${(dimension.indicators || []).map((indicator) => `
+          <section class="indicator-card">
+            <div class="indicator-topline">
+              <strong>${escapeHtml(indicator.indicator_name)}</strong>
+              <span>${escapeHtml(indicator.score)} x ${escapeHtml(indicator.weight_in_dimension)} = ${escapeHtml(indicator.weighted_score)}</span>
+            </div>
+            <p class="indicator-formula">Rule: ${escapeHtml(indicator.formula || indicator.rule_id || 'n/a')}</p>
+            <p class="indicator-raw">Raw value: ${escapeHtml(formatValue(indicator.raw_value))}</p>
+            ${(indicator.deductions || []).length ? `<div class="deduction-list">${indicator.deductions.map((item) => `<span class="pill warn">${escapeHtml(item.reason)} (${escapeHtml(item.delta)})</span>`).join('')}</div>` : ''}
+            ${(indicator.evidence_refs || []).length ? `<div class="evidence-ref-list">${indicator.evidence_refs.map((item) => `<span class="pill ref">${escapeHtml(item)}</span>`).join('')}</div>` : ''}
+          </section>
+        `).join('')}
+      </div>
+      <div class="dimension-evidence-list">
+        ${(dimension.evidences || []).map((item) => `
+          <article class="evidence-card-mini">
+            <div class="evidence-meta">
+              <span class="badge">${escapeHtml(item.evidence_id || '-')}</span>
+              <span>${escapeHtml(item.source_type || item.source || '-')}</span>
+            </div>
+            <p>${escapeHtml(item.excerpt || '')}</p>
+          </article>
+        `).join('') || '<div class="empty-inline">No source evidence in this dimension.</div>'}
+      </div>
+    </article>
+  `).join('');
+
+  const evidences = trace.evidences || [];
+  els.evidenceRawCount.textContent = String(evidences.length);
+  els.evidenceRawList.innerHTML = evidences.map((item) => `
+    <article class="evidence-raw-card">
+      <div class="evidence-meta">
+        <span class="badge">${escapeHtml(item.evidence_id || '-')}</span>
+        <span>${escapeHtml(item.source_type || item.source || '-')}</span>
+        <span>${escapeHtml(item.source_ref || '-')}</span>
+      </div>
+      <p>${escapeHtml(item.excerpt || '')}</p>
+      <div class="evidence-footer">
+        <span>confidence: ${escapeHtml(item.confidence ?? '-')}</span>
+        <span>rule: ${escapeHtml(item.extract_rule || '-')}</span>
+      </div>
+    </article>
+  `).join('');
+}
+
+function formatValue(value) {
+  if (value == null || value === '') {
+    return '-';
+  }
+  if (Array.isArray(value)) {
+    return value.join(', ');
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 0);
+    } catch (error) {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 function polarPosition(cx, cy, radius, angle) {
@@ -410,7 +524,7 @@ async function generateFollowUps() {
 async function generateReport() {
   const request = collectRequest();
   state.lastRequest = request;
-  setStatus('正在生成职业规划报告...');
+  setStatus('Generating career report...');
   try {
     const response = await apiFetch('/api/v1/planning/report', {
       method: 'POST',
@@ -419,13 +533,15 @@ async function generateReport() {
     });
     const data = await response.json();
     state.lastReportResponse = data;
+    state.selectedMatchIndex = 0;
     renderMetrics(data);
     renderMatches(data.match_results);
     renderFollowUps(data.follow_up_questions);
     renderReport(data.report);
-    setStatus('职业规划报告生成完成。', 'success');
+    renderEvidenceTrace(data.match_results?.[state.selectedMatchIndex]);
+    setStatus('Career report generated.', 'success');
   } catch (error) {
-    setStatus(`生成报告失败：${error.message}`, 'error');
+    setStatus(`Report generation failed: ${error.message}`, 'error');
   }
 }
 
@@ -480,6 +596,16 @@ function bindEvents() {
   document.getElementById('generateBtn').addEventListener('click', generateReport);
   document.getElementById('downloadMarkdownBtn').addEventListener('click', downloadMarkdown);
   document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
+  els.matchContainer.addEventListener('click', (event) => {
+    const button = event.target.closest('.evidence-btn');
+    if (!button || !state.lastReportResponse?.match_results?.length) {
+      return;
+    }
+    state.selectedMatchIndex = Number(button.dataset.matchIndex) || 0;
+    renderMatches(state.lastReportResponse.match_results);
+    renderEvidenceTrace(state.lastReportResponse.match_results[state.selectedMatchIndex]);
+    setStatus(`Evidence trace ready: ${state.lastReportResponse.match_results[state.selectedMatchIndex].job_family}`, 'success');
+  });
 }
 
 async function init() {

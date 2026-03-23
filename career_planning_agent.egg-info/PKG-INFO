@@ -1,4 +1,4 @@
-Metadata-Version: 2.4
+﻿Metadata-Version: 2.4
 Name: career-planning-agent
 Version: 0.1.0
 Summary: Evidence-driven career planning agent backend.
@@ -66,7 +66,7 @@ pip install -e .
 ### 2. 基于真实岗位数据构建知识库
 
 ```bash
-python -m backend.app.etl.build_knowledge_base --input "C:/Users/15723/Downloads/20260226105856_457 (1).xls" --output-dir "D:/200-study/A13_Agent/data/knowledge_base"
+python -m backend.app.etl.build_knowledge_base --input "D:/200-study/A13_Agent/20260226105856_457.xls" --output-dir "D:/200-study/A13_Agent/data/knowledge_base"
 ```
 
 ### 3. 可选：配置 LLM 增强
@@ -163,3 +163,4 @@ uvicorn backend.app.main:app --reload
 4. 做成“图谱 + 向量检索 + Agent”混合架构，提升解释性与检索能力
 
 换句话说，**知识图谱后续优化完全可以加进去，而且是很自然的升级方向**。只是以你当前比赛阶段看，先用轻量 JSON 图谱更稳、更容易交付。
+

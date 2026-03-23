@@ -129,6 +129,46 @@
           </section>
         </div>
 
+
+        <section class="result-card evidence-card">
+          <div class="section-head">
+            <div>
+              <h2>Evidence Trace</h2>
+              <p class="section-copy">Click "View Evidence" on a match card to inspect dimension scores, indicator formulas, and raw evidence.</p>
+            </div>
+            <span id="evidenceMatchName" class="badge">No match selected</span>
+          </div>
+          <div id="evidenceEmpty" class="empty-state">Generate a report first, then inspect the full scoring trace.</div>
+          <div id="evidenceTracePanel" class="evidence-trace hidden">
+            <div class="trace-summary-grid">
+              <article class="trace-stat accent">
+                <span>Match Score</span>
+                <strong id="evidenceScore">-</strong>
+              </article>
+              <article class="trace-stat">
+                <span>Formula</span>
+                <strong id="evidenceFormula">-</strong>
+              </article>
+              <article class="trace-stat">
+                <span>Rule Version</span>
+                <strong id="evidenceRuleVersion">-</strong>
+              </article>
+              <article class="trace-stat">
+                <span>KB Version</span>
+                <strong id="evidenceKbVersion">-</strong>
+              </article>
+            </div>
+            <div id="evidenceDimensionList" class="dimension-trace-list"></div>
+            <div class="trace-raw-section">
+              <div class="section-head minor">
+                <h3>Raw Evidence Pool</h3>
+                <span id="evidenceRawCount" class="badge">0</span>
+              </div>
+              <div id="evidenceRawList" class="evidence-raw-list"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="result-card graph-card">
           <div class="section-head">
             <h2>岗位图谱</h2>

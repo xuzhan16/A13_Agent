@@ -1,4 +1,4 @@
-import json
+﻿import json
 from typing import Optional
 
 from backend.app.infra.json_utils import try_parse_json
@@ -184,19 +184,166 @@ class StudentProfilerService:
             missing.append('城市偏好')
         return missing
 
-    @staticmethod
-    def _build_evidences(intake: StudentIntakeRequest, llm_payload: dict) -> list[EvidenceItem]:
+    def _build_evidences(self, intake: StudentIntakeRequest, llm_payload: dict) -> list[EvidenceItem]:
         evidences: list[EvidenceItem] = []
+
+        def add(
+            source: str,
+            source_type: str,
+            source_ref: str,
+            excerpt: str,
+            normalized_value: object = '',
+            confidence: float = 1.0,
+            extract_rule: str = 'direct_copy',
+            tags: Optional[list[str]] = None,
+        ) -> None:
+            text = str(excerpt).strip()
+            if not text:
+                return
+            evidences.append(
+                EvidenceItem(
+                    evidence_id=f'E{len(evidences) + 1:02d}',
+                    source=source,
+                    source_type=source_type,
+                    source_ref=source_ref,
+                    excerpt=text[:220],
+                    normalized_value=normalized_value,
+                    confidence=confidence,
+                    extract_rule=extract_rule,
+                    tags=tags or [],
+                )
+            )
+
+        if intake.basic_info.degree.strip():
+            add(
+                source='student_basic_info',
+                source_type='student_basic_info',
+                source_ref='basic_info.degree',
+                excerpt=f'学历：{intake.basic_info.degree}',
+                normalized_value=intake.basic_info.degree,
+                tags=['degree'],
+            )
+        if intake.basic_info.major.strip():
+            add(
+                source='student_basic_info',
+                source_type='student_basic_info',
+                source_ref='basic_info.major',
+                excerpt=f'专业：{intake.basic_info.major}',
+                normalized_value=intake.basic_info.major,
+                tags=['major'],
+            )
+        if intake.preference.target_roles:
+            add(
+                source='student_preference',
+                source_type='student_preference',
+                source_ref='preference.target_roles',
+                excerpt=f'目标岗位：{"、".join(intake.preference.target_roles)}',
+                normalized_value=intake.preference.target_roles,
+                tags=['target_role'],
+            )
+        if intake.preference.target_cities:
+            add(
+                source='student_preference',
+                source_type='student_preference',
+                source_ref='preference.target_cities',
+                excerpt=f'目标城市：{"、".join(intake.preference.target_cities)}',
+                normalized_value=intake.preference.target_cities,
+                tags=['target_city'],
+            )
         if intake.resume_text.strip():
-            evidences.append(EvidenceItem(source='resume_text', excerpt=intake.resume_text[:160]))
-        for item in intake.project_experiences[:2]:
-            evidences.append(EvidenceItem(source='project', excerpt=item[:160]))
-        for item in intake.internship_experiences[:2]:
-            evidences.append(EvidenceItem(source='internship', excerpt=item[:160]))
+            add(
+                source='resume_text',
+                source_type='resume_text',
+                source_ref='resume_text',
+                excerpt=intake.resume_text,
+                normalized_value=intake.resume_text[:160],
+                extract_rule='resume_segment',
+                tags=['resume'],
+            )
+        if intake.self_description.strip():
+            add(
+                source='self_description',
+                source_type='self_description',
+                source_ref='self_description',
+                excerpt=intake.self_description,
+                normalized_value=intake.self_description[:160],
+                extract_rule='self_report',
+                tags=['self_description'],
+            )
+        if intake.manual_skills:
+            add(
+                source='manual_skills',
+                source_type='manual_skills',
+                source_ref='manual_skills',
+                excerpt=f'手动技能：{"、".join(intake.manual_skills)}',
+                normalized_value=intake.manual_skills,
+                extract_rule='manual_input',
+                tags=['skill', 'manual_skill'],
+            )
+        for index, item in enumerate(intake.project_experiences, start=1):
+            add(
+                source='project',
+                source_type='project_experience',
+                source_ref=f'project_experiences[{index - 1}]',
+                excerpt=item,
+                normalized_value=item[:160],
+                extract_rule='project_segment',
+                tags=['project'],
+            )
+        for index, item in enumerate(intake.internship_experiences, start=1):
+            add(
+                source='internship',
+                source_type='internship_experience',
+                source_ref=f'internship_experiences[{index - 1}]',
+                excerpt=item,
+                normalized_value=item[:160],
+                extract_rule='internship_segment',
+                tags=['internship'],
+            )
+        for index, item in enumerate(intake.campus_experiences, start=1):
+            add(
+                source='campus',
+                source_type='campus_experience',
+                source_ref=f'campus_experiences[{index - 1}]',
+                excerpt=item,
+                normalized_value=item[:160],
+                extract_rule='campus_segment',
+                tags=['campus'],
+            )
+        if intake.certificates:
+            add(
+                source='certificates',
+                source_type='certificate',
+                source_ref='certificates',
+                excerpt=f'证书：{"、".join(intake.certificates)}',
+                normalized_value=intake.certificates,
+                extract_rule='certificate_list',
+                tags=['certificate'],
+            )
+        for index, item in enumerate(intake.follow_up_answers, start=1):
+            add(
+                source='follow_up',
+                source_type='follow_up_answer',
+                source_ref=f'follow_up_answers[{index - 1}]',
+                excerpt=f'{item.question}：{item.answer}',
+                normalized_value={'question': item.question, 'answer': item.answer},
+                confidence=0.95,
+                extract_rule='follow_up_capture',
+                tags=['follow_up'],
+            )
         for item in llm_payload.get('evidences', [])[:2]:
             if isinstance(item, str) and item.strip():
-                evidences.append(EvidenceItem(source='llm_extracted', excerpt=item[:160]))
-        return evidences[:5]
+                add(
+                    source='llm_extracted',
+                    source_type='llm_extracted',
+                    source_ref='llm_payload.evidences',
+                    excerpt=item,
+                    normalized_value=item[:160],
+                    confidence=0.72,
+                    extract_rule='llm_extract',
+                    tags=['llm'],
+                )
+        return evidences
 
     @staticmethod
     def _build_summary(

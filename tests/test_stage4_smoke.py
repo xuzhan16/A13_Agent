@@ -1,3 +1,7 @@
+import os
+
+os.environ['ENABLE_LLM'] = 'false'
+
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
@@ -49,3 +53,15 @@ def test_export_markdown_endpoint() -> None:
     assert response.status_code == 200
     assert 'attachment;' in response.headers.get('content-disposition', '').lower()
     assert '# 大学生职业生涯发展报告' in response.text
+
+
+def test_report_contains_evidence_trace() -> None:
+    response = client.post('/api/v1/planning/report', json=SAMPLE_REQUEST)
+    assert response.status_code == 200
+    payload = response.json()
+    top_match = payload['match_results'][0]
+    assert 'evidence_trace' in top_match
+    assert top_match['evidence_trace']['final_score']['formula']
+    assert len(top_match['evidence_trace']['dimensions']) == 4
+    assert all(item['indicators'] for item in top_match['evidence_trace']['dimensions'])
+    assert len(top_match['evidence_trace']['evidences']) >= 1

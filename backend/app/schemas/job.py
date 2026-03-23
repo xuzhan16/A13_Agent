@@ -1,8 +1,8 @@
-from typing import Optional
+﻿from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from backend.app.schemas.common import DimensionScore
+from backend.app.schemas.common import DimensionScore, EvidenceItem
 
 
 class JobRequirementProfile(BaseModel):
@@ -26,6 +26,28 @@ class JobRequirementProfile(BaseModel):
     evidence_snippets: list[str] = Field(default_factory=list)
 
 
+class TraceVersionInfo(BaseModel):
+    score_rule_version: str
+    extractor_version: str
+    knowledge_base_version: str
+
+
+class FinalScoreTrace(BaseModel):
+    raw_score: float
+    display_score: int
+    formula: str
+
+
+class MatchEvidenceTrace(BaseModel):
+    trace_id: str
+    generated_at: str = ''
+    versions: TraceVersionInfo
+    input_snapshot: dict[str, Any] = Field(default_factory=dict)
+    evidences: list[EvidenceItem] = Field(default_factory=list)
+    dimensions: list[DimensionScore] = Field(default_factory=list)
+    final_score: FinalScoreTrace
+
+
 class MatchResult(BaseModel):
     job_family: str
     overall_score: float
@@ -33,3 +55,4 @@ class MatchResult(BaseModel):
     matched_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     dimension_scores: list[DimensionScore] = Field(default_factory=list)
+    evidence_trace: Optional[MatchEvidenceTrace] = None

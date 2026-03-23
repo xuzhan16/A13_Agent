@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from backend.app.agents.orchestrator import CareerPlanningOrchestrator
-from backend.app.dependencies import get_orchestrator, get_repository, get_resume_parser
+from backend.app.dependencies import get_orchestrator, get_repository, get_resume_parser, get_resume_structurer
 from backend.app.repositories.knowledge_repository import KnowledgeRepository
 from backend.app.schemas.graph import JobGraph
 from backend.app.schemas.job import JobRequirementProfile
@@ -16,6 +16,7 @@ from backend.app.schemas.planning import (
 )
 from backend.app.schemas.resume import ResumeParseResponse
 from backend.app.services.resume_parser import ResumeParserService
+from backend.app.services.resume_structurer import ResumeStructuringService
 
 router = APIRouter()
 
@@ -38,9 +39,15 @@ def get_job_graph(
 async def parse_resume(
     file: UploadFile = File(...),
     parser: ResumeParserService = Depends(get_resume_parser),
+    structurer: ResumeStructuringService = Depends(get_resume_structurer),
 ) -> ResumeParseResponse:
     content = await file.read()
-    return parser.parse(file_name=file.filename or 'resume.txt', content=content)
+    parsed = parser.parse(file_name=file.filename or 'resume.txt', content=content)
+    structured = structurer.structure(parsed.extracted_text, file_name=file.filename or 'resume.txt')
+    payload = parsed.dict()
+    payload['structured_profile'] = structured.dict()
+    payload['form_fill_suggestion'] = structured.form_fill_suggestion.dict()
+    return ResumeParseResponse(**payload)
 
 
 @router.post('/follow-up-questions', response_model=FollowUpQuestionResponse)

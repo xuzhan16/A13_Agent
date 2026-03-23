@@ -12,6 +12,7 @@ from backend.app.services.matching import MatchingService
 from backend.app.services.path_planner import PathPlannerService
 from backend.app.services.report_builder import ReportBuilderService
 from backend.app.services.resume_parser import ResumeParserService
+from backend.app.services.resume_structurer import ResumeStructuringService
 from backend.app.services.student_profiler import StudentProfilerService
 
 
@@ -38,6 +39,12 @@ def get_llm_client() -> LLMClient:
 @lru_cache()
 def get_resume_parser() -> ResumeParserService:
     return ResumeParserService()
+
+
+
+@lru_cache()
+def get_resume_structurer() -> ResumeStructuringService:
+    return ResumeStructuringService(get_repository())
 
 
 @lru_cache()
