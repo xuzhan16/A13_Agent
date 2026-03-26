@@ -1,0 +1,189 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neo4j Knowledge Graph Explorer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ea;
+      --panel: #fffaf2;
+      --text: #1e2b24;
+      --muted: #607066;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --border: #dccfbb;
+      --shadow: 0 14px 32px rgba(30, 43, 36, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, #fff8ed, #f4f1ea 55%, #ebe5d9 100%);
+      color: var(--text);
+    }
+    .page {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 360px 1fr 360px;
+      gap: 20px;
+      min-height: 100vh;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+    h1, h2, h3 { margin: 0 0 12px; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; }
+    .muted { color: var(--muted); }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+    .field input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      background: white;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font: inherit;
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      transition: transform .18s ease, opacity .18s ease;
+    }
+    button.secondary { background: var(--accent-2); }
+    button:hover { transform: translateY(-1px); opacity: .94; }
+    #viz {
+      height: 76vh;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,244,237,.96));
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,.8);
+    }
+    .pill {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #e7f7f5;
+      color: var(--accent);
+      margin-right: 6px;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .path-chain {
+      font-weight: 600;
+      margin-bottom: 8px;
+      line-height: 1.6;
+    }
+    .scroll {
+      max-height: 30vh;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .empty {
+      padding: 18px;
+      border-radius: 14px;
+      background: rgba(15, 118, 110, 0.06);
+      color: var(--muted);
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .case-box {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(15,118,110,0.12), rgba(180,83,9,0.08));
+      border: 1px solid rgba(15,118,110,0.14);
+    }
+    @media (max-width: 1200px) {
+      .page { grid-template-columns: 1fr; }
+      #viz { height: 56vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <aside class="panel">
+      <h1>Neo4j 图谱演示</h1>
+      <p class="muted">直接渲染 Neo4j 知识图谱，并通过后端接口查询转岗路径、个性化路径和证据链。</p>
+
+      <div class="case-box">
+        <h3>答辩案例</h3>
+        <p class="muted">学生 C：Java开发工程师背景，目标转向架构师。</p>
+        <button id="load-case">加载学生 C 案例</button>
+      </div>
+
+      <h2 style="margin-top: 18px;">连接配置</h2>
+      <div class="field"><label>Neo4j URI</label><input id="neo4j-uri" value="bolt://127.0.0.1:7687" /></div>
+      <div class="row">
+        <div class="field"><label>用户名</label><input id="neo4j-user" value="neo4j" /></div>
+        <div class="field"><label>数据库</label><input id="neo4j-database" value="neo4j" /></div>
+      </div>
+      <div class="field"><label>密码</label><input id="neo4j-password" type="password" value="password" /></div>
+      <button id="render-graph">渲染图谱</button>
+
+      <h2 style="margin-top: 20px;">路径查询</h2>
+      <div class="field"><label>起点岗位</label><input id="from-job" value="Java开发工程师" /></div>
+      <div class="field"><label>目标岗位</label><input id="to-job" value="架构师" /></div>
+      <div class="row">
+        <div class="field"><label>最大步数</label><input id="max-steps" type="number" min="1" max="8" value="5" /></div>
+        <div class="field"><label>学生技能</label><input id="student-skills" value="Java,Spring Boot,MySQL,接口设计" /></div>
+      </div>
+      <button id="query-paths" class="secondary">查询所有路径</button>
+      <button id="query-personalized" style="margin-top: 8px;">查询个性化路径</button>
+      <p id="query-status" class="muted" style="margin-top: 12px;">等待查询</p>
+    </aside>
+
+    <main class="panel">
+      <h2>交互式知识图谱</h2>
+      <div id="viz"></div>
+      <p class="muted" style="margin-top: 12px;">提示：点击节点查看岗位详情，点击边查看转岗条件、成功率和证据来源。</p>
+    </main>
+
+    <aside class="panel">
+      <h2>最优路径摘要</h2>
+      <div id="case-summary" class="scroll">
+        <div class="empty">点击“加载学生 C 案例”或执行查询后，这里会显示推荐路径摘要。</div>
+      </div>
+
+      <h2 style="margin-top: 18px;">路径结果</h2>
+      <div id="path-results" class="scroll">
+        <div class="empty">查询后会在这里展示所有路径、成功率、时间成本和补齐技能。</div>
+      </div>
+
+      <h2 style="margin-top: 18px;">详情 / 证据链</h2>
+      <div id="detail-panel" class="scroll">
+        <div class="empty">点击图谱节点、关系或路径卡片查看详细证据。</div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="https://unpkg.com/neovis.js@2.1.0/dist/neovis.js"></script>
+  <script src="/static/neo4j-explorer.js"></script>
+</body>
+</html>

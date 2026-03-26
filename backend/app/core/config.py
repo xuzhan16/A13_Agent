@@ -48,7 +48,12 @@ class Settings:
     app_port: int
     log_level: str
     default_top_k_matches: int
+    knowledge_source: str
     knowledge_base_dir: str
+    neo4j_uri: str
+    neo4j_user: str
+    neo4j_password: str
+    neo4j_database: str
     enable_llm: bool
     llm_api_base_url: str
     llm_api_key: str
@@ -65,7 +70,12 @@ class Settings:
             app_port=_read_setting('APP_PORT', 8000, int, dotenv),
             log_level=_read_setting('LOG_LEVEL', 'INFO', str, dotenv),
             default_top_k_matches=_read_setting('DEFAULT_TOP_K_MATCHES', 3, int, dotenv),
+            knowledge_source=_read_setting('KNOWLEDGE_SOURCE', 'file', str, dotenv).lower(),
             knowledge_base_dir=_read_setting('KNOWLEDGE_BASE_DIR', 'data/knowledge_base', str, dotenv),
+            neo4j_uri=_read_setting('NEO4J_URI', 'bolt://localhost:7687', str, dotenv),
+            neo4j_user=_read_setting('NEO4J_USER', 'neo4j', str, dotenv),
+            neo4j_password=_read_setting('NEO4J_PASSWORD', 'password', str, dotenv),
+            neo4j_database=_read_setting('NEO4J_DATABASE', 'neo4j', str, dotenv),
             enable_llm=_read_setting('ENABLE_LLM', False, _cast_bool, dotenv),
             llm_api_base_url=_read_setting('LLM_API_BASE_URL', '', str, dotenv),
             llm_api_key=_read_setting('LLM_API_KEY', '', str, dotenv),

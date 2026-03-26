@@ -111,6 +111,38 @@ class ResumeStructuringService:
 
     LANGUAGE_SKILLS = {'Java', 'Python', 'C', 'C++', 'C#', 'Go', 'JavaScript', 'TypeScript', 'PHP', 'Ruby', 'Rust', 'Kotlin', 'Scala', 'SQL'}
     FRAMEWORK_SKILLS = {'Spring Boot', 'Spring Cloud', 'MyBatis', 'Django', 'Flask', 'FastAPI', 'Vue', 'React', 'Angular', 'Node.js'}
+    COMPANY_HINTS = ('有限公司', '集团', '公司', '科技', '信息', '网络', '软件', '银行', '智能', '电子', '通信', '数据')
+    ORG_LABELS = ('公司', '单位', '组织', '部门', '学校')
+    CAMPUS_ORG_HINTS = ('学生会', '社团', '协会', '实验室', '班级', '志愿', '竞赛', '工作室', '俱乐部', '社联')
+    CAMPUS_ROLE_HINTS = ('负责人', '主席', '副主席', '部长', '副部长', '组长', '班长', '委员', '干事', '队长', '社长', '会长')
+    INTERNSHIP_ROLE_HINTS = ('实习生', '工程师', '开发', '测试', '产品', '运营', '算法', '数据', '助理')
+
+    REASON_TEXT_MAP = {
+        'explicit_name_label': '根据姓名标签直接识别。',
+        'first_line_heuristic': '根据简历首行推断得到，建议人工确认。',
+        'name_not_found': '未从简历中稳定识别到姓名。',
+        'explicit_school_label': '根据学校标签直接识别。',
+        'school_pattern': '根据院校名称模式识别。',
+        'school_not_found': '学校信息缺失或表达不规范。',
+        'explicit_major_label': '根据专业标签直接识别。',
+        'education_line_major_heuristic': '根据教育经历行推断得到，建议人工确认。',
+        'major_not_found': '专业信息未明确识别。',
+        'explicit_degree_label': '根据学历或学位标签直接识别。',
+        'degree_keyword_match': '根据学历关键词识别。',
+        'degree_not_found': '学历字段未识别。',
+        'explicit_graduation_year': '根据毕业时间标签直接识别。',
+        'latest_year_heuristic': '根据全文中出现的最新年份推断，建议确认是否为毕业年份。',
+        'graduation_year_not_found': '毕业年份未明确标注。',
+    }
+
+    EXPERIENCE_FIELD_LABELS = {
+        'title': '标题',
+        'organization': '组织/公司',
+        'role': '角色/岗位',
+        'time_range': '时间段',
+        'tech_stack': '技术栈',
+        'obtained_at': '获得时间',
+    }
 
     def __init__(self, repository: KnowledgeRepository) -> None:
         self.repository = repository
@@ -201,7 +233,7 @@ class ResumeStructuringService:
                 continue
             if 1 < len(line) <= 8 and re.fullmatch(r'[A-Za-z\u4e00-\u9fa5· ]{2,20}', line):
                 return self._make_field(line, 0.62, line, 'first_line_heuristic')
-        return self._make_field('', 0.0, '', 'name_not_found', status='pending_confirmation', reason='未从简历中稳定识别到姓名')
+        return self._make_field('', 0.0, '', 'name_not_found', status='pending_confirmation', reason_text='未从简历中稳定识别到姓名')
 
     def _extract_school(self, lines: list[str]) -> ResumeExtractionField:
         for line in lines:
@@ -212,7 +244,7 @@ class ResumeStructuringService:
             match = self.SCHOOL_PATTERN.search(line)
             if match:
                 return self._make_field(match.group(1), 0.82, line, 'school_pattern')
-        return self._make_field('', 0.0, '', 'school_not_found', status='pending_confirmation', reason='学校信息缺失或表达不规范')
+        return self._make_field('', 0.0, '', 'school_not_found', status='pending_confirmation', reason_text='学校信息缺失或表达不规范')
 
     def _extract_major(self, lines: list[str]) -> ResumeExtractionField:
         for line in lines:
@@ -221,12 +253,13 @@ class ResumeStructuringService:
                 return self._make_field(explicit.group(1).strip(), 0.95, line, 'explicit_major_label')
             if self.SCHOOL_PATTERN.search(line):
                 cleaned = self.SCHOOL_PATTERN.sub('', line)
-                cleaned = re.sub(r'20\d{2}[^\u4e00-\u9fa5A-Za-z]*', ' ', cleaned)
+                cleaned = re.sub(r'20\d{2}(?:\u5c4a|\u5e74)?', ' ', cleaned)
+                cleaned = re.sub(r'\u5c4a', ' ', cleaned)
                 cleaned = re.sub('|'.join(self.DEGREE_ORDER), ' ', cleaned)
                 candidate = re.sub(r'\s+', ' ', cleaned).strip(' -|/')
                 if 1 < len(candidate) <= 20 and not self.TIME_RANGE_PATTERN.search(candidate):
                     return self._make_field(candidate, 0.68, line, 'education_line_major_heuristic')
-        return self._make_field('', 0.0, '', 'major_not_found', status='pending_confirmation', reason='专业信息未明确识别')
+        return self._make_field('', 0.0, '', 'major_not_found', status='pending_confirmation', reason_text='专业信息未明确识别')
 
     def _extract_degree(self, lines: list[str]) -> ResumeExtractionField:
         for degree in self.DEGREE_ORDER:
@@ -235,7 +268,7 @@ class ResumeStructuringService:
                     confidence = 0.95 if re.search(r'(?:学历|学位)[:： ]*', line) else 0.82
                     reason = 'explicit_degree_label' if confidence > 0.9 else 'degree_keyword_match'
                     return self._make_field(degree, confidence, line, reason)
-        return self._make_field('', 0.0, '', 'degree_not_found', status='pending_confirmation', reason='学历字段未识别')
+        return self._make_field('', 0.0, '', 'degree_not_found', status='pending_confirmation', reason_text='学历字段未识别')
 
     def _extract_graduation_year(self, lines: list[str], full_text: str) -> ResumeExtractionField:
         for line in lines:
@@ -245,7 +278,7 @@ class ResumeStructuringService:
         years = [match.group(1) for match in self.GRAD_YEAR_PATTERN.finditer(full_text)]
         if years:
             return self._make_field(sorted(years)[-1], 0.65, full_text[:120], 'latest_year_heuristic')
-        return self._make_field('', 0.0, '', 'graduation_year_not_found', status='pending_confirmation', reason='毕业年份未明确标注')
+        return self._make_field('', 0.0, '', 'graduation_year_not_found', status='pending_confirmation', reason_text='毕业年份未明确标注')
 
     def _extract_skills(self, lines: list[str], sections: dict[str, list[str]]) -> ResumeStructuredSkills:
         relevant_lines = sections.get('skills', []) + sections.get('project', []) + sections.get('internship', []) + lines[:20]
@@ -305,6 +338,8 @@ class ResumeStructuringService:
         if not lines:
             return []
         blocks = self._group_blocks(lines, item_type)
+        if item_type == 'project':
+            blocks = self._merge_project_blocks(blocks)
         items: list[ResumeExperienceItem] = []
         known_skills = {item.canonical_name for item in skills.matched_skills}
         for block in blocks:
@@ -369,16 +404,30 @@ class ResumeStructuringService:
             blocks.append(current)
         return blocks
 
+    def _merge_project_blocks(self, blocks: list[list[str]]) -> list[list[str]]:
+        merged: list[list[str]] = []
+        index = 0
+        while index < len(blocks):
+            current = list(blocks[index])
+            if index + 1 < len(blocks):
+                next_block = blocks[index + 1]
+                if len(current) == 1 and next_block and self.TIME_RANGE_PATTERN.search(next_block[0]):
+                    current.extend(next_block)
+                    index += 1
+            merged.append(current)
+            index += 1
+        return merged
+
     def _looks_like_title_line(self, line: str, item_type: str) -> bool:
         text = line.strip()
         if len(text) > 36:
             return False
         if item_type == 'project' and any(hint in text for hint in self.PROJECT_TITLE_HINTS):
             return True
-        if item_type == 'internship' and re.search(r'(公司|科技|信息|网络|软件|银行|集团|有限公司)', text):
-            return True
-        if item_type == 'campus' and re.search(r'(学生会|社团|协会|实验室|班级|志愿|竞赛)', text):
-            return True
+        if item_type == 'internship':
+            return any(keyword in text for keyword in self.COMPANY_HINTS) or ('实习' in text and len(text) <= 24)
+        if item_type == 'campus':
+            return any(keyword in text for keyword in self.CAMPUS_ORG_HINTS)
         return False
 
     def _starts_with_detail_prefix(self, line: str) -> bool:
@@ -400,17 +449,49 @@ class ResumeStructuringService:
     def _extract_organization(self, text: str, item_type: str) -> str:
         if item_type == 'project':
             return ''
-        explicit = re.search(r'(?:公司|单位|组织|部门|机构)[:： ]*([^|；;]+)', text)
-        if explicit:
-            return explicit.group(1).strip()
+
+        normalized = ' '.join(text.replace('|', ' ').replace(',', ' ').split())
+        for label in self.ORG_LABELS:
+            match = re.search(rf'(?:^|[\s|]){label}\s*[:：]\s*([^\s|；;，,]+)', normalized)
+            if match:
+                return match.group(1).strip()[:40]
+
         if item_type == 'internship':
-            company = re.search(r'([A-Za-z0-9\u4e00-\u9fa5·()（）-]{2,40}(?:公司|集团|科技|信息|网络|软件|银行|有限公司))', text)
-            if company:
-                return company.group(1)
+            company_match = re.search(
+                r'([A-Za-z0-9\u4e00-\u9fa5·()（）-]{2,40}(?:有限公司|集团|公司|科技|信息|网络|软件|银行))',
+                normalized,
+            )
+            if company_match:
+                return company_match.group(1).strip()[:40]
+
+            prefix = self.TIME_RANGE_PATTERN.sub('', normalized).strip(' -|/：:')
+            for role_keyword in self.INTERNSHIP_ROLE_HINTS:
+                if role_keyword in prefix:
+                    candidate = prefix.split(role_keyword, 1)[0].strip(' -|/：:')
+                    if candidate:
+                        candidate = candidate.split()[-1]
+                    if any(keyword in candidate for keyword in self.COMPANY_HINTS):
+                        return candidate[:40]
+            for part in prefix.split():
+                if any(keyword in part for keyword in self.COMPANY_HINTS):
+                    return part[:40]
+
         if item_type == 'campus':
-            campus = re.search(r'([A-Za-z0-9\u4e00-\u9fa5·()（）-]{2,30}(?:学生会|社团|协会|实验室|班级|志愿队|竞赛队))', text)
-            if campus:
-                return campus.group(1)
+            campus_match = re.search(
+                r'([A-Za-z0-9\u4e00-\u9fa5·()（）-]{2,24}(?:学生会|社团|协会|实验室|班级|志愿服务队|工作室|俱乐部|竞赛队))',
+                normalized,
+            )
+            if campus_match:
+                return campus_match.group(1).strip()[:40]
+            for role_keyword in self.CAMPUS_ROLE_HINTS:
+                if role_keyword in normalized:
+                    candidate = normalized.split(role_keyword, 1)[0].strip(' -|/：:')
+                    if any(keyword in candidate for keyword in self.CAMPUS_ORG_HINTS) and 1 < len(candidate) <= 24:
+                        return candidate[:40]
+            for keyword in self.CAMPUS_ORG_HINTS:
+                if keyword in normalized:
+                    prefix = normalized.split(keyword, 1)[0].strip()
+                    return (prefix + keyword).strip()[:40]
         return ''
 
     def _extract_role(self, text: str, item_type: str) -> str:
@@ -495,19 +576,49 @@ class ResumeStructuringService:
         for field_name, label in [('name', '姓名'), ('school', '学校'), ('major', '专业'), ('degree', '学历'), ('graduation_year', '毕业年份')]:
             field = getattr(basic_info, field_name)
             if field.status != 'confirmed':
-                pending.append(ResumePendingField(field_path=f'basic_info.{field_name}', label=label, reason=field.reason or '待确认'))
+                pending.append(
+                    ResumePendingField(
+                        field_path=f'basic_info.{field_name}',
+                        label=label,
+                        reason=self._humanize_reason(field.reason or '待确认'),
+                    )
+                )
         for index, item in enumerate(projects):
             for field_name in item.pending_fields:
-                pending.append(ResumePendingField(field_path=f'project_experiences[{index}].{field_name}', label=f'项目经历 {index + 1} / {field_name}', reason='项目字段未完全识别'))
+                pending.append(
+                    ResumePendingField(
+                        field_path=f'project_experiences[{index}].{field_name}',
+                        label=f'项目经历 {index + 1} / {self._experience_field_label(field_name)}',
+                        reason=self._pending_reason('project', field_name),
+                    )
+                )
         for index, item in enumerate(internships):
             for field_name in item.pending_fields:
-                pending.append(ResumePendingField(field_path=f'internship_experiences[{index}].{field_name}', label=f'实习经历 {index + 1} / {field_name}', reason='实习字段需要用户确认'))
+                pending.append(
+                    ResumePendingField(
+                        field_path=f'internship_experiences[{index}].{field_name}',
+                        label=f'实习经历 {index + 1} / {self._experience_field_label(field_name)}',
+                        reason=self._pending_reason('internship', field_name),
+                    )
+                )
         for index, item in enumerate(campus):
             for field_name in item.pending_fields:
-                pending.append(ResumePendingField(field_path=f'campus_experiences[{index}].{field_name}', label=f'校园经历 {index + 1} / {field_name}', reason='校园经历字段需要确认'))
+                pending.append(
+                    ResumePendingField(
+                        field_path=f'campus_experiences[{index}].{field_name}',
+                        label=f'校园经历 {index + 1} / {self._experience_field_label(field_name)}',
+                        reason=self._pending_reason('campus', field_name),
+                    )
+                )
         for index, item in enumerate(certificates):
             for field_name in item.pending_fields:
-                pending.append(ResumePendingField(field_path=f'certificates[{index}].{field_name}', label=f'证书 {index + 1} / {field_name}', reason='证书时间缺失'))
+                pending.append(
+                    ResumePendingField(
+                        field_path=f'certificates[{index}].{field_name}',
+                        label=f'证书 {index + 1} / {self._experience_field_label(field_name)}',
+                        reason=self._pending_reason('certificate', field_name),
+                    )
+                )
         return pending
 
     def _build_notes(
@@ -605,8 +716,32 @@ class ResumeStructuringService:
             return 'framework'
         return 'tool'
 
-    @staticmethod
+    def _humanize_reason(self, reason: str) -> str:
+        return self.REASON_TEXT_MAP.get(reason, reason or '待确认')
+
+    def _experience_field_label(self, field_name: str) -> str:
+        return self.EXPERIENCE_FIELD_LABELS.get(field_name, field_name)
+
+    def _pending_reason(self, item_type: str, field_name: str) -> str:
+        label = self._experience_field_label(field_name)
+        if item_type == 'project':
+            if field_name == 'tech_stack':
+                return '项目中未识别出明确技术栈，建议补充使用的语言、框架或工具。'
+            if field_name == 'role':
+                return '项目中未识别出你的职责角色，建议补充负责模块或分工。'
+            if field_name == 'title':
+                return '项目标题不够明确，建议补充项目名称。'
+            return f'项目{label}信息不完整，建议补充。'
+        if item_type == 'internship':
+            return f'实习{label}信息不够明确，建议补充公司、岗位或时间。'
+        if item_type == 'campus':
+            return f'校园经历的{label}信息不够明确，建议补充组织名称或角色。'
+        if item_type == 'certificate':
+            return '证书获得时间缺失，建议补充年份。'
+        return f'{label}信息待确认。'
+
     def _make_field(
+        self,
         value: str,
         confidence: float,
         source_excerpt: str,
@@ -620,7 +755,7 @@ class ResumeStructuringService:
             status=effective_status,
             confidence=round(confidence, 2),
             source_excerpt=source_excerpt[:180],
-            reason=reason_text or reason,
+            reason=reason_text or self._humanize_reason(reason),
         )
 
     @staticmethod

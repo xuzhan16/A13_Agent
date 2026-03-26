@@ -282,91 +282,56 @@ class MatchingService:
         soft_score = 60.0 if not required else round(55 + len(overlap) / len(required) * 45, 1)
         soft_indicator = self._build_indicator(
             indicator_code='literacy.soft_skill_coverage',
-            indicator_name='岗位素养覆盖',
-            weight_in_dimension=0.35,
+            indicator_name='\u5c97\u4f4d\u7d20\u517b\u8986\u76d6',
+            weight_in_dimension=0.10,
             raw_value={'required_soft_skills': job.soft_skills, 'matched_soft_skills': overlap},
             score=soft_score,
-            rule_id='literacy.coverage.v1',
-            formula='55 + 素养命中率×45；若岗位未配置素养词则给 60 分基线',
+            rule_id='literacy.coverage.v2',
+            formula='55 + coverage_ratio*45',
             evidence_refs=self._find_evidence_refs(evidences, keywords=overlap or job.soft_skills[:2], tags=['resume', 'self_description', 'campus', 'internship', 'job_soft_skills']),
-            deductions=[ScoreDeduction(reason=f'缺少岗位素养证据：{item}', delta=-8) for item in sorted(required - actual)[:4]],
-            strengths=[f'已体现素养：{item}' for item in overlap[:4]],
-            gaps=[f'待补素养证明：{item}' for item in sorted(required - actual)[:4]],
+            deductions=[ScoreDeduction(reason=f'\u7f3a\u5c11\u5c97\u4f4d\u7d20\u517b\u8bc1\u636e\uff1a{item}', delta=-8) for item in sorted(required - actual)[:4]],
+            strengths=[f'\u5df2\u4f53\u73b0\u7d20\u517b\uff1a{item}' for item in overlap[:4]],
+            gaps=[f'\u5f85\u8865\u7d20\u517b\u8bc1\u660e\uff1a{item}' for item in sorted(required - actual)[:4]],
         )
 
-        teamwork_keywords = ['团队', '协作', '联调', '合作', '组织']
-        teamwork_hits = self._keyword_hits(evidences, teamwork_keywords, tags=['project', 'internship', 'campus'])
-        teamwork_score = min(100.0, round(45 + teamwork_hits * 12 + (10 if student_profile.campus_count >= 1 else 0), 1))
-        teamwork_indicator = self._build_indicator(
-            indicator_code='literacy.teamwork',
-            indicator_name='团队协作',
+        communication_indicator = self._soft_skill_indicator(
+            student_profile,
+            skill_code='communication',
+            indicator_code='literacy.communication',
+            indicator_name='\u6c9f\u901a\u80fd\u529b',
+            weight_in_dimension=0.30,
+            evidences=evidences,
+        )
+        stress_indicator = self._soft_skill_indicator(
+            student_profile,
+            skill_code='stress_tolerance',
+            indicator_code='literacy.stress_tolerance',
+            indicator_name='\u6297\u538b\u80fd\u529b',
             weight_in_dimension=0.20,
-            raw_value={'teamwork_hits': teamwork_hits},
-            score=teamwork_score,
-            rule_id='literacy.teamwork.v1',
-            formula='45 + 协作关键词命中×12 + 校园组织经历加分',
-            evidence_refs=self._find_evidence_refs(evidences, keywords=teamwork_keywords, tags=['project', 'internship', 'campus']),
-            deductions=[] if teamwork_score >= 75 else [ScoreDeduction(reason='协作分工证据偏少', delta=teamwork_score - 75)],
-            strengths=['体现了协作、联调或组织能力'] if teamwork_score >= 75 else [],
-            gaps=['建议补充协作分工、跨角色联动描述'] if teamwork_score < 75 else [],
+            evidences=evidences,
         )
-
-        ownership_keywords = ['负责', '主导', '推进', '跟进', '组长', 'review']
-        ownership_hits = self._keyword_hits(evidences, ownership_keywords, tags=['project', 'internship', 'campus'])
-        ownership_score = min(100.0, round(40 + ownership_hits * 12, 1))
-        ownership_indicator = self._build_indicator(
-            indicator_code='literacy.ownership',
-            indicator_name='责任意识',
-            weight_in_dimension=0.20,
-            raw_value={'ownership_hits': ownership_hits},
-            score=ownership_score,
-            rule_id='literacy.ownership.v1',
-            formula='40 + 负责/主导类关键词命中×12，上限 100',
-            evidence_refs=self._find_evidence_refs(evidences, keywords=ownership_keywords, tags=['project', 'internship', 'campus']),
-            deductions=[] if ownership_score >= 70 else [ScoreDeduction(reason='主导或负责证据较少', delta=ownership_score - 70)],
-            strengths=['存在负责模块或组织推进证据'] if ownership_score >= 70 else [],
-            gaps=['建议明确个人负责范围和交付结果'] if ownership_score < 70 else [],
+        execution_indicator = self._soft_skill_indicator(
+            student_profile,
+            skill_code='execution',
+            indicator_code='literacy.execution',
+            indicator_name='\u6267\u884c\u529b',
+            weight_in_dimension=0.25,
+            evidences=evidences,
         )
-
-        problem_keywords = ['优化', '排查', '定位', '分析', '解决', '改进', '下降', '提升']
-        problem_hits = self._keyword_hits(evidences, problem_keywords, tags=['resume', 'project', 'internship'])
-        problem_score = min(100.0, round(45 + problem_hits * 10, 1))
-        problem_indicator = self._build_indicator(
-            indicator_code='literacy.problem_solving',
-            indicator_name='问题分析',
+        innovation_indicator = self._soft_skill_indicator(
+            student_profile,
+            skill_code='innovation',
+            indicator_code='literacy.innovation',
+            indicator_name='\u521b\u65b0\u80fd\u529b',
             weight_in_dimension=0.15,
-            raw_value={'problem_hits': problem_hits},
-            score=problem_score,
-            rule_id='literacy.problem.v1',
-            formula='45 + 优化/排查类关键词命中×10，上限 100',
-            evidence_refs=self._find_evidence_refs(evidences, keywords=problem_keywords, tags=['resume', 'project', 'internship']),
-            deductions=[] if problem_score >= 75 else [ScoreDeduction(reason='缺少问题定位或优化结果证据', delta=problem_score - 75)],
-            strengths=['有优化或问题排查证据'] if problem_score >= 75 else [],
-            gaps=['建议补充量化结果和问题解决过程'] if problem_score < 75 else [],
-        )
-
-        expression_keywords = ['汇报', '分享', '沟通', '文档', '答辩', '说明']
-        expression_hits = self._keyword_hits(evidences, expression_keywords, tags=['self_description', 'campus', 'follow_up'])
-        expression_score = min(100.0, round(40 + expression_hits * 12, 1))
-        expression_indicator = self._build_indicator(
-            indicator_code='literacy.expression',
-            indicator_name='表达沟通',
-            weight_in_dimension=0.10,
-            raw_value={'expression_hits': expression_hits},
-            score=expression_score,
-            rule_id='literacy.expression.v1',
-            formula='40 + 沟通/汇报类关键词命中×12，上限 100',
-            evidence_refs=self._find_evidence_refs(evidences, keywords=expression_keywords, tags=['self_description', 'campus', 'follow_up']),
-            deductions=[] if expression_score >= 70 else [ScoreDeduction(reason='表达汇报证据较弱', delta=expression_score - 70)],
-            strengths=['有表达或汇报证据'] if expression_score >= 70 else [],
-            gaps=['建议补充汇报、答辩或文档协作经验'] if expression_score < 70 else [],
+            evidences=evidences,
         )
 
         return self._assemble_dimension(
-            name='职业素养',
+            name='\u804c\u4e1a\u7d20\u517b',
             dimension_code='professional_literacy',
             weight=self.LITERACY_WEIGHT,
-            indicators=[soft_indicator, teamwork_indicator, ownership_indicator, problem_indicator, expression_indicator],
+            indicators=[soft_indicator, communication_indicator, stress_indicator, execution_indicator, innovation_indicator],
             evidence_map=evidence_map,
         )
 
@@ -377,75 +342,123 @@ class MatchingService:
         evidences: list[EvidenceItem],
         evidence_map: dict[str, EvidenceItem],
     ) -> DimensionScore:
-        learning_keywords = ['学习', '自学', '笔记', '课程', '刷题', '总结', '优化', '研究']
-        learning_hits = self._keyword_hits(evidences, learning_keywords, tags=['resume', 'self_description', 'project', 'follow_up'])
-        learning_score = min(100.0, round(50 + learning_hits * 8 + (10 if '学习能力' in student_profile.soft_skills else 0), 1))
-        learning_indicator = self._build_indicator(
+        learning_indicator = self._soft_skill_indicator(
+            student_profile,
+            skill_code='learning_agility',
             indicator_code='potential.learning_agility',
-            indicator_name='学习敏捷度',
+            indicator_name='\u5b66\u4e60\u654f\u6377\u5ea6',
             weight_in_dimension=0.35,
-            raw_value={'learning_hits': learning_hits, 'soft_skills': student_profile.soft_skills},
-            score=learning_score,
-            rule_id='potential.learning.v1',
-            formula='50 + 学习类关键词命中×8 + 学习能力标签加分，上限 100',
-            evidence_refs=self._find_evidence_refs(evidences, keywords=learning_keywords, tags=['resume', 'self_description', 'follow_up', 'project']),
-            deductions=[] if learning_score >= 80 else [ScoreDeduction(reason='缺少自学、复盘或持续成长证据', delta=learning_score - 80)],
-            strengths=['有持续学习与自我提升迹象'] if learning_score >= 80 else [],
-            gaps=['建议补充刷题、技术笔记或学习路径'] if learning_score < 80 else [],
+            evidences=evidences,
+            fallback_score=min(100.0, round(50 + self._keyword_hits(evidences, ['\u5b66\u4e60', '\u81ea\u5b66', '\u7b14\u8bb0', '\u8bfe\u7a0b', '\u5237\u9898', '\u603b\u7ed3', '\u4f18\u5316', '\u7814\u7a76'], tags=['resume', 'self_description', 'project', 'follow_up']) * 8, 1)),
+            fallback_formula='50 + learning_hits*8',
+            fallback_rule='potential.learning.v2',
         )
 
         growth_score = min(100.0, round(40 + student_profile.project_count * 16 + student_profile.internship_count * 18 + student_profile.campus_count * 8, 1))
         growth_indicator = self._build_indicator(
             indicator_code='potential.growth_curve',
-            indicator_name='成长曲线',
+            indicator_name='\u6210\u957f\u66f2\u7ebf',
             weight_in_dimension=0.30,
             raw_value={'project_count': student_profile.project_count, 'internship_count': student_profile.internship_count, 'campus_count': student_profile.campus_count},
             score=growth_score,
             rule_id='potential.growth.v1',
-            formula='40 + 项目数×16 + 实习数×18 + 校园经历数×8，上限 100',
+            formula='40 + project_count*16 + internship_count*18 + campus_count*8',
             evidence_refs=self._find_evidence_refs(evidences, tags=['project', 'internship', 'campus']),
-            deductions=[] if growth_score >= 80 else [ScoreDeduction(reason='成长路径证据仍偏早期', delta=growth_score - 80)],
-            strengths=['经历结构较完整，具备持续成长基础'] if growth_score >= 80 else [],
-            gaps=['建议增加更高难度项目或真实业务经历'] if growth_score < 80 else [],
+            deductions=[] if growth_score >= 80 else [ScoreDeduction(reason='\u6210\u957f\u8def\u5f84\u8bc1\u636e\u4ecd\u504f\u65e9\u671f', delta=growth_score - 80)],
+            strengths=['\u7ecf\u5386\u7ed3\u6784\u8f83\u5b8c\u6574\uff0c\u5177\u5907\u6301\u7eed\u6210\u957f\u57fa\u7840'] if growth_score >= 80 else [],
+            gaps=['\u5efa\u8bae\u589e\u52a0\u66f4\u9ad8\u96be\u5ea6\u9879\u76ee\u6216\u771f\u5b9e\u4e1a\u52a1\u7ecf\u5386'] if growth_score < 80 else [],
         )
 
         goal_score = min(100.0, round(35 + (25 if student_profile.preference.target_roles else 0) + (15 if student_profile.preference.target_cities else 0) + (15 if any(item.source_type == 'follow_up_answer' for item in evidences) else 0) + (10 if any(item.source_type == 'self_description' for item in evidences) else 0), 1))
         goal_indicator = self._build_indicator(
             indicator_code='potential.goal_clarity',
-            indicator_name='目标清晰度',
+            indicator_name='\u76ee\u6807\u6e05\u6670\u5ea6',
             weight_in_dimension=0.20,
             raw_value={'target_roles': student_profile.preference.target_roles, 'target_cities': student_profile.preference.target_cities},
             score=goal_score,
             rule_id='potential.goal.v1',
-            formula='35 + 目标岗位/城市/追问/自述证据累加，上限 100',
+            formula='35 + role_city_followup_selfdesc_bonus',
             evidence_refs=self._find_evidence_refs(evidences, tags=['target_role', 'target_city', 'follow_up', 'self_description']),
-            deductions=[] if goal_score >= 85 else [ScoreDeduction(reason='职业目标仍可进一步聚焦', delta=goal_score - 85)],
-            strengths=['求职目标较清晰'] if goal_score >= 85 else [],
-            gaps=['建议进一步明确主岗与备选岗'] if goal_score < 85 else [],
+            deductions=[] if goal_score >= 85 else [ScoreDeduction(reason='\u804c\u4e1a\u76ee\u6807\u4ecd\u53ef\u8fdb\u4e00\u6b65\u805a\u7126', delta=goal_score - 85)],
+            strengths=['\u6c42\u804c\u76ee\u6807\u8f83\u6e05\u6670'] if goal_score >= 85 else [],
+            gaps=['\u5efa\u8bae\u8fdb\u4e00\u6b65\u660e\u786e\u4e3b\u5c97\u4e0e\u5907\u9009\u5c97'] if goal_score < 85 else [],
         )
 
         credential_score = min(100.0, round(45 + len(student_profile.certificates) * 18, 1))
         credential_indicator = self._build_indicator(
             indicator_code='potential.credential_support',
-            indicator_name='标准化证明',
+            indicator_name='\u6807\u51c6\u5316\u8bc1\u660e',
             weight_in_dimension=0.15,
             raw_value={'certificates': student_profile.certificates},
             score=credential_score,
             rule_id='potential.credential.v1',
-            formula='45 + 证书数量×18，上限 100',
+            formula='45 + certificate_count*18',
             evidence_refs=self._find_evidence_refs(evidences, tags=['certificate']),
-            deductions=[] if student_profile.certificates else [ScoreDeduction(reason='暂无证书或标准化证明材料', delta=-20)],
-            strengths=['有证书或标准化证明材料'] if student_profile.certificates else [],
-            gaps=['可补充证书、竞赛或课程认证'] if not student_profile.certificates else [],
+            deductions=[] if student_profile.certificates else [ScoreDeduction(reason='\u6682\u65e0\u8bc1\u4e66\u6216\u6807\u51c6\u5316\u8bc1\u660e\u6750\u6599', delta=-20)],
+            strengths=['\u6709\u8bc1\u4e66\u6216\u6807\u51c6\u5316\u8bc1\u660e\u6750\u6599'] if student_profile.certificates else [],
+            gaps=['\u53ef\u8865\u5145\u8bc1\u4e66\u3001\u7ade\u8d5b\u6216\u8bfe\u7a0b\u8ba4\u8bc1'] if not student_profile.certificates else [],
         )
 
         return self._assemble_dimension(
-            name='发展潜力',
+            name='\u53d1\u5c55\u6f5c\u529b',
             dimension_code='development_potential',
             weight=self.POTENTIAL_WEIGHT,
             indicators=[learning_indicator, growth_indicator, goal_indicator, credential_indicator],
             evidence_map=evidence_map,
         )
+
+    def _soft_skill_indicator(
+        self,
+        student_profile: StudentProfile,
+        skill_code: str,
+        indicator_code: str,
+        indicator_name: str,
+        weight_in_dimension: float,
+        evidences: list[EvidenceItem],
+        fallback_score: float = 58.0,
+        fallback_formula: str = 'fallback_baseline',
+        fallback_rule: str = 'soft.fallback.v1',
+    ) -> IndicatorScore:
+        assessment = self._get_soft_skill_assessment(student_profile, skill_code)
+        if assessment is None:
+            return self._build_indicator(
+                indicator_code=indicator_code,
+                indicator_name=indicator_name,
+                weight_in_dimension=weight_in_dimension,
+                raw_value={'assessment': 'missing'},
+                score=fallback_score,
+                rule_id=fallback_rule,
+                formula=fallback_formula,
+                evidence_refs=self._find_evidence_refs(evidences, tags=['resume', 'self_description', 'project', 'internship', 'campus', 'follow_up']),
+                deductions=[ScoreDeduction(reason=f'\u7f3a\u5c11{indicator_name}\u663e\u5f0f\u8bc1\u636e\uff0c\u6309\u4fdd\u5b88\u89c4\u5219\u8ba1\u5206', delta=fallback_score - 70)],
+                strengths=[],
+                gaps=[f'\u5efa\u8bae\u8865\u5145{indicator_name}\u7684\u573a\u666f\u3001\u884c\u4e3a\u548c\u7ed3\u679c\u8bc1\u636e'],
+            )
+        deductions = [] if assessment.score >= 70 else [ScoreDeduction(reason=f'{indicator_name}\u8bc1\u636e\u5f3a\u5ea6\u504f\u5f31', delta=assessment.score - 70)]
+        return self._build_indicator(
+            indicator_code=indicator_code,
+            indicator_name=indicator_name,
+            weight_in_dimension=weight_in_dimension,
+            raw_value={
+                'score': assessment.score,
+                'level': assessment.level,
+                'summary': assessment.summary,
+            },
+            score=assessment.score,
+            rule_id=f'soft.{skill_code}.assessment.v1',
+            formula='reuse_student_soft_skill_score',
+            evidence_refs=assessment.evidence_refs,
+            deductions=deductions,
+            strengths=[assessment.summary] if assessment.score >= 75 else [],
+            gaps=[assessment.suggestions[0]] if assessment.suggestions and assessment.score < 70 else [],
+        )
+
+    @staticmethod
+    def _get_soft_skill_assessment(student_profile: StudentProfile, skill_code: str):
+        for item in student_profile.soft_skill_assessments:
+            if item.skill_code == skill_code:
+                return item
+        return None
 
     @staticmethod
     def _build_indicator(

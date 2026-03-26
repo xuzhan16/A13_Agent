@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -12,6 +11,7 @@ from backend.app.core.logging import configure_logging
 
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 INDEX_FILE = STATIC_DIR / 'index.html'
+NEO4J_EXPLORER_FILE = STATIC_DIR / 'neo4j-explorer.html'
 
 
 def create_app() -> FastAPI:
@@ -35,6 +35,11 @@ def create_app() -> FastAPI:
         @app.get('/demo', include_in_schema=False)
         def demo() -> FileResponse:
             return FileResponse(INDEX_FILE)
+
+        if NEO4J_EXPLORER_FILE.exists():
+            @app.get('/neo4j-explorer', include_in_schema=False)
+            def neo4j_explorer() -> FileResponse:
+                return FileResponse(NEO4J_EXPLORER_FILE)
 
     return app
 

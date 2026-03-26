@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -52,3 +52,14 @@ class DimensionScore(BaseModel):
     gaps: list[str] = Field(default_factory=list)
     evidences: list[EvidenceItem] = Field(default_factory=list)
     indicators: list[IndicatorScore] = Field(default_factory=list)
+
+
+class SoftSkillAssessment(BaseModel):
+    skill_code: str
+    skill_name: str
+    score: float
+    level: str
+    summary: str = ''
+    evidence_refs: list[str] = Field(default_factory=list)
+    indicators: list[IndicatorScore] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -39,9 +39,85 @@
             <h2>1. 简历解析</h2>
             <button id="parseResumeBtn" class="ghost-btn">解析文件</button>
           </div>
-          <input id="resumeFile" type="file" accept=".txt,.md,.markdown,.docx" />
-          <div id="resumeParseMeta" class="inline-note">支持 txt / md / docx</div>
+          <input id="resumeFile" type="file" accept=".txt,.md,.markdown,.docx,.pdf" />
+          <div id="resumeParseMeta" class="inline-note">支持 txt / md / docx / pdf</div>
           <div id="resumePreview" class="code-preview">尚未解析简历文件</div>
+        </section>
+
+        <section class="panel-card">
+          <div class="section-head">
+            <div>
+              <h2>1.5 结构化回填</h2>
+              <p class="section-copy">解析后自动抽取字段、提示待确认项，并可回填下方表单。</p>
+            </div>
+            <button id="applyStructuredBtn" class="ghost-btn" disabled>应用回填</button>
+          </div>
+          <div id="structuredEmpty" class="empty-state">解析文件后，这里会展示结构化字段、技能匹配和待确认项。</div>
+          <div id="structuredPanel" class="structured-panel hidden">
+            <div class="structured-meta-row">
+              <span id="structuredMeta" class="inline-note">尚未生成结构化结果</span>
+              <span id="structuredPendingCount" class="badge">0</span>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>基础信息</h3>
+              </div>
+              <div id="structuredBasicInfo" class="structured-basic-grid"></div>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>技能识别</h3>
+                <span id="structuredSkillCount" class="badge">0</span>
+              </div>
+              <div id="structuredSkillList" class="skill-pills"></div>
+              <div id="structuredUnmatchedList" class="structured-inline-list"></div>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>待确认项</h3>
+              </div>
+              <div id="structuredPendingList" class="stack-list"></div>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>项目经历</h3>
+              </div>
+              <div id="structuredProjectList" class="stack-list"></div>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>实习经历</h3>
+              </div>
+              <div id="structuredInternshipList" class="stack-list"></div>
+            </div>
+
+            <div class="structured-block">
+              <div class="section-head minor">
+                <h3>校园经历</h3>
+              </div>
+              <div id="structuredCampusList" class="stack-list"></div>
+            </div>
+
+            <div class="structured-block two-col-stack">
+              <div>
+                <div class="section-head minor">
+                  <h3>证书</h3>
+                </div>
+                <div id="structuredCertificateList" class="stack-list"></div>
+              </div>
+              <div>
+                <div class="section-head minor">
+                  <h3>创新指标</h3>
+                </div>
+                <div id="structuredInnovationList" class="stack-list"></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="panel-card">
@@ -111,16 +187,49 @@
           </article>
         </div>
 
+        <section id="resultNavigatorSection" class="result-card navigator-card">
+          <div class="section-head">
+            <div>
+              <h2>结果入口</h2>
+              <p class="section-copy">生成报告后，可从这里快速进入各分析模块。</p>
+            </div>
+            <span id="resultNavigatorCount" class="badge">0/7</span>
+          </div>
+          <div id="resultNavigator" class="result-nav-grid empty-state">先生成职业报告，再从入口卡片跳转查看各部分结果。</div>
+        </section>
+
         <div class="result-grid two-col-results">
-          <section class="result-card">
+          <section id="softSkillSection" class="result-card">
+            <div class="section-head">
+              <h2>软素质显式画像</h2>
+              <span id="softSkillCount" class="badge">0</span>
+            </div>
+            <div id="softSkillOverview" class="soft-skill-grid empty-state">生成报告后，这里会展示 5 类软素质评分。</div>
+          </section>
+
+          <section id="trendSection" class="result-card">
+            <div class="section-head">
+              <div>
+                <h2>行业趋势分析</h2>
+                <p class="section-copy">结合岗位热度、技能热度与行业变化，为未来 3 年路径提供参考。</p>
+              </div>
+              <span id="trendMeta" class="badge">snapshot</span>
+            </div>
+            <div id="trendPanel" class="trend-panel empty-state">生成报告后，这里会展示趋势分析。</div>
+          </section>
+        </div>
+
+        <div class="result-grid two-col-results">
+          <section id="followUpSection" class="result-card">
             <div class="section-head">
               <h2>Agent 追问</h2>
               <span id="questionCount" class="badge">0</span>
             </div>
             <div id="followUpContainer" class="stack-list empty-state">先点击“生成追问”</div>
+            <div id="followUpAnswerHint" class="inline-note hidden">可在每个问题下方直接填写回答，系统会自动带入报告生成。</div>
           </section>
 
-          <section class="result-card">
+          <section id="matchSection" class="result-card">
             <div class="section-head">
               <h2>岗位匹配结果</h2>
               <span class="badge">Top 3</span>
@@ -129,16 +238,15 @@
           </section>
         </div>
 
-
-        <section class="result-card evidence-card">
+        <section id="evidenceSection" class="result-card evidence-card">
           <div class="section-head">
             <div>
               <h2>Evidence Trace</h2>
-              <p class="section-copy">Click "View Evidence" on a match card to inspect dimension scores, indicator formulas, and raw evidence.</p>
+              <p class="section-copy">点击岗位卡片中的“查看证据”即可看到维度分、指标公式和原始证据。</p>
             </div>
             <span id="evidenceMatchName" class="badge">No match selected</span>
           </div>
-          <div id="evidenceEmpty" class="empty-state">Generate a report first, then inspect the full scoring trace.</div>
+          <div id="evidenceEmpty" class="empty-state">先生成职业报告，再查看完整评分证据链。</div>
           <div id="evidenceTracePanel" class="evidence-trace hidden">
             <div class="trace-summary-grid">
               <article class="trace-stat accent">
@@ -169,20 +277,28 @@
           </div>
         </section>
 
-        <section class="result-card graph-card">
-          <div class="section-head">
-            <h2>岗位图谱</h2>
-            <div class="legend">
-              <span><i class="dot dot-job"></i>岗位族</span>
-              <span><i class="dot dot-stage"></i>职业阶段</span>
-              <span><i class="line line-vertical"></i>纵向路径</span>
-              <span><i class="line line-transfer"></i>换岗路径</span>
+        <section id="graphSection" class="result-card graph-card">
+          <div class="section-head graph-head">
+            <div>
+              <h2>岗位图谱</h2>
+              <p class="section-copy">支持从全局图谱切换到当前学生的个性化子图，查看路径、缺口技能和证据来源。</p>
+            </div>
+            <div class="graph-head-actions">
+              <button id="viewPersonalGraphBtn" class="secondary-btn">查看我的图谱</button>
+              <button id="viewGlobalGraphBtn" class="ghost-btn" disabled>恢复全局图谱</button>
             </div>
           </div>
+          <div class="legend graph-legend">
+            <span><i class="dot dot-job"></i>岗位族</span>
+            <span><i class="dot dot-stage"></i>技能 / 阶段</span>
+            <span><i class="line line-vertical"></i>纵向路径</span>
+            <span><i class="line line-transfer"></i>转岗路径</span>
+          </div>
+          <div id="personalGraphSummary" class="personal-graph-summary empty-state">先生成职业报告，再点击“查看我的图谱”。</div>
           <svg id="graphSvg" class="graph-canvas" viewBox="0 0 1100 620" preserveAspectRatio="xMidYMid meet"></svg>
         </section>
 
-        <section class="result-card report-card">
+        <section id="reportSection" class="result-card report-card">
           <div class="section-head">
             <h2>职业规划报告</h2>
             <span id="reportModeBadge" class="badge">template</span>

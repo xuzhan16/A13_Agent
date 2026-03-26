@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from backend.app.schemas.common import EvidenceItem, QuestionAnswer
+from backend.app.schemas.common import EvidenceItem, QuestionAnswer, SoftSkillAssessment
 
 
 class StudentBasicInfo(BaseModel):
@@ -39,6 +39,7 @@ class StudentProfile(BaseModel):
     preference: CareerPreference
     hard_skills: list[str] = Field(default_factory=list)
     soft_skills: list[str] = Field(default_factory=list)
+    soft_skill_assessments: list[SoftSkillAssessment] = Field(default_factory=list)
     certificates: list[str] = Field(default_factory=list)
     inferred_strengths: list[str] = Field(default_factory=list)
     inferred_gaps: list[str] = Field(default_factory=list)

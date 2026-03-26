@@ -1,9 +1,14 @@
-from io import BytesIO
+﻿from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from backend.app.schemas.resume import ResumeParseResponse
+
+try:
+    from PyPDF2 import PdfReader
+except ImportError:  # pragma: no cover
+    PdfReader = None
 
 
 class ResumeParserService:
@@ -28,15 +33,25 @@ class ResumeParserService:
         if suffix == '.docx':
             text = self._parse_docx(content)
             return self._build_response(file_name=file_name, file_type=suffix, text=text)
+        if suffix == '.pdf':
+            if PdfReader is None:
+                return self._unsupported_response(file_name, suffix, '当前环境未安装 PDF 解析依赖，暂时无法解析 PDF 简历。')
+            text = self._parse_pdf(content)
+            message = '解析成功' if text.strip() else 'PDF 已读取，但未提取到有效文本，可能是扫描版简历。'
+            return self._build_response(file_name=file_name, file_type=suffix, text=text, message=message)
+        return self._unsupported_response(file_name, suffix, '当前仅支持 txt、md、docx、pdf 简历解析。')
+
+    @staticmethod
+    def _unsupported_response(file_name: str, file_type: str, message: str) -> ResumeParseResponse:
         return ResumeParseResponse(
             file_name=file_name,
-            file_type=suffix or 'unknown',
+            file_type=file_type or 'unknown',
             parsed_success=False,
             extracted_text='',
             preview='',
             char_count=0,
             section_hints=[],
-            message='当前仅支持 txt、md、docx 简历解析。',
+            message=message,
         )
 
     @staticmethod
@@ -62,8 +77,19 @@ class ResumeParserService:
                 paragraphs.append(paragraph)
         return '\n'.join(paragraphs)
 
-    def _build_response(self, file_name: str, file_type: str, text: str) -> ResumeParseResponse:
+    @staticmethod
+    def _parse_pdf(content: bytes) -> str:
+        reader = PdfReader(BytesIO(content))
+        pages: list[str] = []
+        for page in reader.pages:
+            page_text = page.extract_text() or ''
+            if page_text.strip():
+                pages.append(page_text.strip())
+        return '\n'.join(pages)
+
+    def _build_response(self, file_name: str, file_type: str, text: str, message: str = '') -> ResumeParseResponse:
         normalized_text = text.replace('\r\n', '\n').strip()
+        final_message = message or ('解析成功' if normalized_text else '未提取到有效文本')
         return ResumeParseResponse(
             file_name=file_name,
             file_type=file_type,
@@ -72,7 +98,7 @@ class ResumeParserService:
             preview=normalized_text[:240],
             char_count=len(normalized_text),
             section_hints=self._detect_sections(normalized_text),
-            message='解析成功' if normalized_text else '未提取到有效文本',
+            message=final_message,
         )
 
     def _detect_sections(self, text: str) -> list[str]:

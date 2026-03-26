@@ -1,27 +1,29 @@
-﻿import json
+import json
 from typing import Optional
 
 from backend.app.infra.json_utils import try_parse_json
 from backend.app.infra.llm.base import LLMClient
 from backend.app.prompts.templates import STUDENT_PROFILE_SYSTEM_PROMPT
 from backend.app.repositories.knowledge_repository import KnowledgeRepository
-from backend.app.schemas.common import EvidenceItem
+from backend.app.schemas.common import EvidenceItem, SoftSkillAssessment
 from backend.app.schemas.student import StudentIntakeRequest, StudentProfile
+from backend.app.services.soft_skill_assessor import SoftSkillAssessmentService
 
 
 class StudentProfilerService:
     def __init__(
         self,
         repository: KnowledgeRepository,
+        soft_skill_assessor: SoftSkillAssessmentService,
         llm_client: Optional[LLMClient] = None,
     ) -> None:
         self.repository = repository
+        self.soft_skill_assessor = soft_skill_assessor
         self.llm_client = llm_client
 
     def build_profile(self, intake: StudentIntakeRequest) -> StudentProfile:
         corpus = self._build_corpus(intake)
         rule_hard_skills = self._extract_keywords(corpus, self.repository.get_skill_lexicon())
-        rule_soft_skills = self._extract_keywords(corpus, self.repository.get_soft_skill_lexicon())
         llm_payload = self._extract_with_llm(intake)
 
         hard_skills = self._merge_terms(
@@ -29,11 +31,17 @@ class StudentProfilerService:
             intake.manual_skills,
             self._filter_allowed(llm_payload.get('hard_skills', []), self.repository.get_skill_lexicon()),
         )
+        certificates = self._merge_terms(intake.certificates, llm_payload.get('certificates', []))
+        evidences = self._build_evidences(intake, llm_payload)
+        soft_skill_assessments = self.soft_skill_assessor.assess(intake, hard_skills, evidences)
+
+        rule_soft_skills = self._extract_keywords(corpus, self.repository.get_soft_skill_lexicon())
+        assessment_labels = self.soft_skill_assessor.labels_from_assessments(soft_skill_assessments)
         soft_skills = self._merge_terms(
             rule_soft_skills,
-            self._filter_allowed(llm_payload.get('soft_skills', []), self.repository.get_soft_skill_lexicon()),
+            assessment_labels,
+            self._filter_soft_skills(llm_payload.get('soft_skills', []), assessment_labels),
         )
-        certificates = self._merge_terms(intake.certificates, llm_payload.get('certificates', []))
 
         completeness_score = self._compute_completeness(intake)
         competitiveness_score = self._compute_competitiveness(
@@ -42,25 +50,26 @@ class StudentProfilerService:
             project_count=len(intake.project_experiences),
             internship_count=len(intake.internship_experiences),
             certificate_count=len(certificates),
+            soft_skill_assessments=soft_skill_assessments,
         )
 
         inferred_strengths = self._merge_terms(
-            self._build_strengths(hard_skills, soft_skills, intake),
+            self._build_strengths(hard_skills, soft_skill_assessments, intake),
             llm_payload.get('inferred_strengths', []),
         )
         inferred_gaps = self._merge_terms(
-            self._build_gaps(hard_skills, intake),
+            self._build_gaps(hard_skills, soft_skill_assessments, intake),
             llm_payload.get('inferred_gaps', []),
         )
         missing_dimensions = self._build_missing_dimensions(intake, hard_skills, soft_skills, certificates)
-        evidences = self._build_evidences(intake, llm_payload)
-        summary = llm_payload.get('summary', '') or self._build_summary(hard_skills, soft_skills, intake)
+        summary = llm_payload.get('summary', '') or self._build_summary(hard_skills, soft_skill_assessments, intake)
 
         return StudentProfile(
             basic_info=intake.basic_info,
             preference=intake.preference,
             hard_skills=hard_skills,
             soft_skills=soft_skills,
+            soft_skill_assessments=soft_skill_assessments,
             certificates=certificates,
             inferred_strengths=inferred_strengths,
             inferred_gaps=inferred_gaps,
@@ -116,48 +125,63 @@ class StudentProfilerService:
         project_count: int,
         internship_count: int,
         certificate_count: int,
+        soft_skill_assessments: list[SoftSkillAssessment],
     ) -> float:
+        soft_bonus = 0.0
+        if soft_skill_assessments:
+            soft_bonus = sum(item.score for item in soft_skill_assessments) / len(soft_skill_assessments) * 0.15
         raw = (
             min(hard_skill_count, 8) * 6
-            + min(soft_skill_count, 4) * 5
+            + min(soft_skill_count, 5) * 4
             + min(project_count, 3) * 10
             + min(internship_count, 2) * 12
             + min(certificate_count, 3) * 6
+            + soft_bonus
         )
         return round(min(raw, 100), 1)
 
     @staticmethod
     def _build_strengths(
         hard_skills: list[str],
-        soft_skills: list[str],
+        soft_skill_assessments: list[SoftSkillAssessment],
         intake: StudentIntakeRequest,
     ) -> list[str]:
         strengths: list[str] = []
         if hard_skills:
-            strengths.append('已有较明确的技能栈基础')
+            strengths.append('\u5df2\u6709\u8f83\u660e\u786e\u7684\u6280\u80fd\u6808\u57fa\u7840')
         if len(intake.project_experiences) >= 1:
-            strengths.append('具备项目实践经历')
+            strengths.append('\u5177\u5907\u9879\u76ee\u5b9e\u8df5\u7ecf\u5386')
         if len(intake.internship_experiences) >= 1:
-            strengths.append('具备真实职场场景经历')
-        if '学习能力' in soft_skills:
-            strengths.append('学习与适应能力较强')
+            strengths.append('\u5df2\u6709\u8f83\u660e\u786e\u7684\u5c97\u4f4d\u76ee\u6807')
         if intake.preference.target_roles:
-            strengths.append('已有较明确的岗位目标')
-        return strengths or ['待进一步访谈补全优势画像']
+            strengths.append('\u5df2\u6709\u8f83\u660e\u786e\u7684\u5c97\u4f4d\u76ee\u6807')
+
+        ranked = sorted(soft_skill_assessments, key=lambda item: item.score, reverse=True)
+        for item in ranked[:2]:
+            if item.score >= 75:
+                strengths.append(f'{item.skill_name}\u8868\u73b0\u8f83\u5f3a')
+        return strengths or ['\u5f85\u8fdb\u4e00\u6b65\u8bbf\u8c08\u8865\u5168\u4f18\u52bf\u753b\u50cf']
 
     @staticmethod
-    def _build_gaps(hard_skills: list[str], intake: StudentIntakeRequest) -> list[str]:
+    def _build_gaps(
+        hard_skills: list[str],
+        soft_skill_assessments: list[SoftSkillAssessment],
+        intake: StudentIntakeRequest,
+    ) -> list[str]:
         gaps: list[str] = []
         if len(hard_skills) < 3:
-            gaps.append('硬技能证据偏少')
+            gaps.append('\u786c\u6280\u80fd\u8bc1\u636e\u504f\u5c11')
         if not intake.project_experiences:
-            gaps.append('缺少可展示项目经历')
+            gaps.append('\u7f3a\u5c11\u53ef\u5c55\u793a\u9879\u76ee\u7ecf\u5386')
         if not intake.internship_experiences:
-            gaps.append('缺少实习或真实业务场景证明')
+            gaps.append('\u7f3a\u5c11\u5b9e\u4e60\u6216\u771f\u5b9e\u4e1a\u52a1\u573a\u666f\u8bc1\u660e')
         if not intake.certificates:
-            gaps.append('证书与标准化证明材料较少')
+            gaps.append('\u8bc1\u4e66\u4e0e\u6807\u51c6\u5316\u8bc1\u660e\u6750\u6599\u8f83\u5c11')
         if not intake.preference.target_roles:
-            gaps.append('目标岗位尚不明确')
+            gaps.append('\u76ee\u6807\u5c97\u4f4d\u5c1a\u4e0d\u660e\u786e')
+        for item in sorted(soft_skill_assessments, key=lambda row: row.score)[:2]:
+            if item.score < 62:
+                gaps.append(f'{item.skill_name}\u8bc1\u636e\u8f83\u5f31')
         return gaps
 
     @staticmethod
@@ -169,23 +193,24 @@ class StudentProfilerService:
     ) -> list[str]:
         missing: list[str] = []
         if len(hard_skills) < 3:
-            missing.append('硬技能')
+            missing.append('\u786c\u6280\u80fd')
         if len(soft_skills) < 2:
-            missing.append('职业素养')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         if not intake.project_experiences:
-            missing.append('项目经历')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         if not intake.internship_experiences:
-            missing.append('实习经历')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         if not certificates:
-            missing.append('证书证明')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         if not intake.preference.target_roles:
-            missing.append('职业意向')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         if not intake.preference.target_cities:
-            missing.append('城市偏好')
+            missing.append('\u57ce\u5e02\u504f\u597d')
         return missing
 
     def _build_evidences(self, intake: StudentIntakeRequest, llm_payload: dict) -> list[EvidenceItem]:
         evidences: list[EvidenceItem] = []
+        sep = '\u3001'
 
         def add(
             source: str,
@@ -219,7 +244,7 @@ class StudentProfilerService:
                 source='student_basic_info',
                 source_type='student_basic_info',
                 source_ref='basic_info.degree',
-                excerpt=f'学历：{intake.basic_info.degree}',
+                excerpt=f'\u5b66\u5386\uff1a{intake.basic_info.degree}',
                 normalized_value=intake.basic_info.degree,
                 tags=['degree'],
             )
@@ -228,7 +253,7 @@ class StudentProfilerService:
                 source='student_basic_info',
                 source_type='student_basic_info',
                 source_ref='basic_info.major',
-                excerpt=f'专业：{intake.basic_info.major}',
+                excerpt=f'\u4e13\u4e1a\uff1a{intake.basic_info.major}',
                 normalized_value=intake.basic_info.major,
                 tags=['major'],
             )
@@ -237,7 +262,7 @@ class StudentProfilerService:
                 source='student_preference',
                 source_type='student_preference',
                 source_ref='preference.target_roles',
-                excerpt=f'目标岗位：{"、".join(intake.preference.target_roles)}',
+                excerpt=f'\u76ee\u6807\u5c97\u4f4d\uff1a{sep.join(intake.preference.target_roles)}',
                 normalized_value=intake.preference.target_roles,
                 tags=['target_role'],
             )
@@ -246,7 +271,7 @@ class StudentProfilerService:
                 source='student_preference',
                 source_type='student_preference',
                 source_ref='preference.target_cities',
-                excerpt=f'目标城市：{"、".join(intake.preference.target_cities)}',
+                excerpt=f'\u76ee\u6807\u57ce\u5e02\uff1a{sep.join(intake.preference.target_cities)}',
                 normalized_value=intake.preference.target_cities,
                 tags=['target_city'],
             )
@@ -275,7 +300,7 @@ class StudentProfilerService:
                 source='manual_skills',
                 source_type='manual_skills',
                 source_ref='manual_skills',
-                excerpt=f'手动技能：{"、".join(intake.manual_skills)}',
+                excerpt=f'\u624b\u52a8\u6280\u80fd\uff1a{sep.join(intake.manual_skills)}',
                 normalized_value=intake.manual_skills,
                 extract_rule='manual_input',
                 tags=['skill', 'manual_skill'],
@@ -315,7 +340,7 @@ class StudentProfilerService:
                 source='certificates',
                 source_type='certificate',
                 source_ref='certificates',
-                excerpt=f'证书：{"、".join(intake.certificates)}',
+                excerpt=f'\u8bc1\u4e66\uff1a{sep.join(intake.certificates)}',
                 normalized_value=intake.certificates,
                 extract_rule='certificate_list',
                 tags=['certificate'],
@@ -325,7 +350,7 @@ class StudentProfilerService:
                 source='follow_up',
                 source_type='follow_up_answer',
                 source_ref=f'follow_up_answers[{index - 1}]',
-                excerpt=f'{item.question}：{item.answer}',
+                excerpt=f'{item.question}\uff1a{item.answer}',
                 normalized_value={'question': item.question, 'answer': item.answer},
                 confidence=0.95,
                 extract_rule='follow_up_capture',
@@ -348,12 +373,13 @@ class StudentProfilerService:
     @staticmethod
     def _build_summary(
         hard_skills: list[str],
-        soft_skills: list[str],
+        soft_skill_assessments: list[SoftSkillAssessment],
         intake: StudentIntakeRequest,
     ) -> str:
+        top_soft = max(soft_skill_assessments, key=lambda item: item.score).skill_name if soft_skill_assessments else '\u804c\u4e1a\u7d20\u517b'
         return (
-            f'当前已识别 {len(hard_skills)} 项硬技能、{len(soft_skills)} 项软素质，'
-            f'包含 {len(intake.project_experiences)} 段项目经历和 {len(intake.internship_experiences)} 段实习经历。'
+            f'\u5f53\u524d\u5df2\u8bc6\u522b {len(hard_skills)} \u9879\u786c\u6280\u80fd\uff0c\u5305\u542b {len(intake.project_experiences)} \u6bb5\u9879\u76ee\u7ecf\u5386\u548c {len(intake.internship_experiences)} \u6bb5\u5b9e\u4e60\u7ecf\u5386\u3002'
+            f'\u8f6f\u7d20\u8d28\u4e2d\u8868\u73b0\u6700\u7a81\u51fa\u7684\u7ef4\u5ea6\u662f\uff1a{top_soft}\u3002'
         )
 
     @staticmethod
@@ -377,6 +403,24 @@ class StudentProfilerService:
             normalized = str(item).strip().lower()
             if normalized in allowed:
                 result.append(allowed[normalized])
+        return result
+
+    @staticmethod
+    def _filter_soft_skills(items: list[str], assessment_labels: list[str]) -> list[str]:
+        candidate_map = {label.lower(): label for label in assessment_labels}
+        candidate_map.update({
+            '\u56e2\u961f\u534f\u4f5c': '\u56e2\u961f\u534f\u4f5c',
+            '\u56e2\u961f\u534f\u4f5c': '\u56e2\u961f\u534f\u4f5c',
+            '\u56e2\u961f\u534f\u4f5c': '\u56e2\u961f\u534f\u4f5c',
+            '\u6267\u884c\u529b': '\u6267\u884c\u529b',
+            '\u56e2\u961f\u534f\u4f5c': '\u56e2\u961f\u534f\u4f5c',
+            '\u56e2\u961f\u534f\u4f5c': '\u56e2\u961f\u534f\u4f5c',
+        })
+        result: list[str] = []
+        for item in items:
+            text = str(item).strip()
+            if text in candidate_map.values():
+                result.append(text)
         return result
 
     def _extract_with_llm(self, intake: StudentIntakeRequest) -> dict:
@@ -407,7 +451,7 @@ class StudentProfilerService:
             'follow_up_answers': [item.dict() for item in intake.follow_up_answers],
         }
         return (
-            '请从以下学生资料中抽取结构化画像，并仅返回 JSON。'
-            'JSON 字段必须包含 hard_skills、soft_skills、certificates、inferred_strengths、inferred_gaps、evidences、summary。\n'
+            '\u8bf7\u4ece\u4ee5\u4e0b\u5b66\u751f\u8d44\u6599\u4e2d\u62bd\u53d6\u7ed3\u6784\u5316\u753b\u50cf\uff0c\u5e76\u4ec5\u8fd4\u56de JSON\u3002'
+            'JSON \u5b57\u6bb5\u5fc5\u987b\u5305\u542b hard_skills\u3001soft_skills\u3001certificates\u3001inferred_strengths\u3001inferred_gaps\u3001evidences\u3001summary\u3002\n'
             f'{json.dumps(payload, ensure_ascii=False)}'
         )

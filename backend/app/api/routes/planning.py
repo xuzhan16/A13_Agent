@@ -13,6 +13,12 @@ from backend.app.schemas.planning import (
     CareerPlanningResponse,
     FollowUpQuestionRequest,
     FollowUpQuestionResponse,
+    PathEvidenceRequest,
+    PathEvidenceResponse,
+    PersonalizedPathQueryRequest,
+    PersonalizedSubgraphRequest,
+    TransferPathQueryRequest,
+    TransferPathResult,
 )
 from backend.app.schemas.resume import ResumeParseResponse
 from backend.app.services.resume_parser import ResumeParserService
@@ -33,6 +39,58 @@ def get_job_graph(
     repository: KnowledgeRepository = Depends(get_repository),
 ) -> JobGraph:
     return repository.get_job_graph()
+
+
+@router.post('/graph/transfer-paths', response_model=List[TransferPathResult])
+def find_transfer_paths(
+    request: TransferPathQueryRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> List[TransferPathResult]:
+    return repository.find_transfer_paths(
+        from_job=request.from_job,
+        to_job=request.to_job,
+        max_steps=request.max_steps,
+    )
+
+
+@router.post('/graph/personalized-paths', response_model=List[TransferPathResult])
+def find_personalized_paths(
+    request: PersonalizedPathQueryRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> List[TransferPathResult]:
+    return repository.get_personalized_paths(
+        from_job=request.from_job,
+        student_skills=request.student_skills,
+        target_job=request.target_job,
+        max_steps=request.max_steps,
+        limit=request.limit,
+    )
+
+
+@router.post('/graph/path-evidence', response_model=PathEvidenceResponse)
+def get_path_evidence(
+    request: PathEvidenceRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> PathEvidenceResponse:
+    return repository.get_path_evidence(
+        path_jobs=request.path_jobs,
+        student_skills=request.student_skills,
+    )
+
+
+@router.post('/graph/personalized-subgraph', response_model=JobGraph)
+def get_personalized_subgraph(
+    request: PersonalizedSubgraphRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> JobGraph:
+    return repository.get_personalized_subgraph(
+        focus_job=request.focus_job,
+        student_skills=request.student_skills,
+        target_job=request.target_job,
+        recommended_jobs=request.recommended_jobs,
+        missing_skills=request.missing_skills,
+        max_paths=request.max_paths,
+    )
 
 
 @router.post('/resume/parse', response_model=ResumeParseResponse)
