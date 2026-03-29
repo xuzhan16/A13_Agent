@@ -18,9 +18,7 @@ def _load_dotenv(env_path: Path) -> Dict[str, str]:
         if not line or line.startswith('#') or '=' not in line:
             continue
         key, value = line.split('=', 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        values[key] = value
+        values[key.strip()] = value.strip().strip('"').strip("'")
     return values
 
 
@@ -48,8 +46,6 @@ class Settings:
     app_port: int
     log_level: str
     default_top_k_matches: int
-    knowledge_source: str
-    knowledge_base_dir: str
     neo4j_uri: str
     neo4j_user: str
     neo4j_password: str
@@ -70,8 +66,6 @@ class Settings:
             app_port=_read_setting('APP_PORT', 8000, int, dotenv),
             log_level=_read_setting('LOG_LEVEL', 'INFO', str, dotenv),
             default_top_k_matches=_read_setting('DEFAULT_TOP_K_MATCHES', 3, int, dotenv),
-            knowledge_source=_read_setting('KNOWLEDGE_SOURCE', 'file', str, dotenv).lower(),
-            knowledge_base_dir=_read_setting('KNOWLEDGE_BASE_DIR', 'data/knowledge_base', str, dotenv),
             neo4j_uri=_read_setting('NEO4J_URI', 'bolt://localhost:7687', str, dotenv),
             neo4j_user=_read_setting('NEO4J_USER', 'neo4j', str, dotenv),
             neo4j_password=_read_setting('NEO4J_PASSWORD', 'password', str, dotenv),
@@ -87,7 +81,3 @@ class Settings:
 @lru_cache()
 def get_settings() -> Settings:
     return Settings.from_env()
-
-
-def resolve_knowledge_base_dir() -> Path:
-    return Path(get_settings().knowledge_base_dir)

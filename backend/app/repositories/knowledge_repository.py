@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Iterable, Optional
 
-from backend.app.schemas.graph import JobGraph, JobGraphEdge, JobGraphNode, PersonalizedGraphSummary
+from backend.app.schemas.graph import GraphEntityDetail, JobGraph, JobGraphEdge, JobGraphNode, PersonalizedGraphSummary
 from backend.app.schemas.job import JobRequirementProfile
 from backend.app.schemas.planning import PathEvidenceResponse, TransferPathEdge, TransferPathResult
 
@@ -28,6 +28,29 @@ class KnowledgeRepository(ABC):
 
     @abstractmethod
     def get_job_graph(self) -> JobGraph:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_job_recommendations(self, job: str, limit: int = 5) -> list[JobRequirementProfile]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_job_entry_points(self, target_job: str, max_steps: int = 5) -> list[TransferPathResult]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_job_clusters(self) -> dict[str, list[str]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_job_influence_ranking(self) -> list[tuple[str, float]]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_job_relationships(self) -> None:
+        raise NotImplementedError
+
+    def get_graph_entity_detail(self, entity_id: str, node_type: str = 'job_family') -> GraphEntityDetail:
         raise NotImplementedError
 
     def supports_dynamic_graph(self) -> bool:
@@ -142,9 +165,7 @@ class KnowledgeRepository(ABC):
         nodes: list[JobGraphNode] = []
         edges: list[JobGraphEdge] = []
 
-        job_ids = self._unique(
-            [focus_job, *(recommended_jobs or []), *(primary.jobs if primary else [])]
-        )
+        job_ids = self._unique([focus_job, *(recommended_jobs or []), *(primary.jobs if primary else [])])
         for job_id in job_ids:
             nodes.append(self._clone_job_node(node_lookup.get(job_id), job_id, focus_job, target_job, recommended_jobs or [], primary))
 

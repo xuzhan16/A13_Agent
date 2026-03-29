@@ -1,4 +1,4 @@
-﻿CREATE CONSTRAINT job_name_unique IF NOT EXISTS
+CREATE CONSTRAINT job_name_unique IF NOT EXISTS
 FOR (j:Job)
 REQUIRE j.name IS UNIQUE;
 
@@ -9,6 +9,14 @@ REQUIRE s.name IS UNIQUE;
 CREATE CONSTRAINT ability_name_unique IF NOT EXISTS
 FOR (a:Ability)
 REQUIRE a.name IS UNIQUE;
+
+CREATE CONSTRAINT city_name_unique IF NOT EXISTS
+FOR (c:City)
+REQUIRE c.name IS UNIQUE;
+
+CREATE CONSTRAINT industry_name_unique IF NOT EXISTS
+FOR (i:Industry)
+REQUIRE i.name IS UNIQUE;
 
 CREATE INDEX job_name_idx IF NOT EXISTS
 FOR (j:Job)
@@ -21,6 +29,14 @@ ON (s.name);
 CREATE INDEX ability_name_idx IF NOT EXISTS
 FOR (a:Ability)
 ON (a.name);
+
+CREATE INDEX city_name_idx IF NOT EXISTS
+FOR (c:City)
+ON (c.name);
+
+CREATE INDEX industry_name_idx IF NOT EXISTS
+FOR (i:Industry)
+ON (i.name);
 
 CREATE INDEX transfer_success_rate_idx IF NOT EXISTS
 FOR ()-[r:TRANSFER_TO]-()
@@ -43,6 +59,12 @@ MERGE (architect:Job {name: '架构师'})
 SET architect.label = '架构师',
     architect.node_type = 'career_stage',
     architect.description = '负责系统抽象、技术路线设计和跨团队架构治理。';
+
+MERGE (shenzhen:City {name: '深圳'})
+SET shenzhen.job_total = 128;
+
+MERGE (internet:Industry {name: '互联网'})
+SET internet.job_total = 214;
 
 MERGE (sys:Skill {name: '系统设计'})
 SET sys.category = 'architecture',
@@ -70,6 +92,8 @@ MERGE (java)-[:REQUIRES {requirement_type: 'required', importance: 1.0}]->(micro
 MERGE (senior)-[:REQUIRES {requirement_type: 'required', importance: 1.0}]->(sys)
 MERGE (architect)-[:REQUIRES {requirement_type: 'required', importance: 1.0}]->(dist)
 MERGE (architect)-[:DEPENDS_ON {dependency_strength: 0.9}]->(communication)
+MERGE (java)-[:LOCATED_IN {heat_score: 0.91, job_count: 72}]->(shenzhen)
+MERGE (java)-[:BELONGS_TO {market_share: 0.64}]->(internet)
 
 MERGE (java)-[r1:VERTICAL_TO]->(senior)
 SET r1.success_rate = 0.86,

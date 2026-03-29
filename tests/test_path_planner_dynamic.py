@@ -35,6 +35,27 @@ class _FakeRepository(KnowledgeRepository):
     def get_job_graph(self):
         return JobGraph()
 
+    def get_job_recommendations(self, job: str, limit: int = 5):
+        del limit
+        if job == 'Java\u5f00\u53d1\u5de5\u7a0b\u5e08':
+            return [JobRequirementProfile(job_family='\u8f6f\u4ef6\u6d4b\u8bd5\u5de5\u7a0b\u5e08', description='\u6d4b\u8bd5\u5c97\u4f4d')]
+        return []
+
+    def get_job_entry_points(self, target_job: str, max_steps: int = 5):
+        del max_steps
+        if target_job == '\u67b6\u6784\u5e08':
+            return [TransferPathResult(jobs=['Java\u5f00\u53d1\u5de5\u7a0b\u5e08', '\u67b6\u6784\u5e08'], steps=1, cumulative_success_rate=0.55)]
+        return []
+
+    def get_job_clusters(self):
+        return {}
+
+    def get_job_influence_ranking(self):
+        return []
+
+    def build_job_relationships(self):
+        return None
+
     def get_personalized_paths(self, from_job, student_skills, target_job=None, max_steps=5, limit=10):
         del student_skills, max_steps, limit
         if from_job == 'Java开发工程师' and target_job == '架构师':

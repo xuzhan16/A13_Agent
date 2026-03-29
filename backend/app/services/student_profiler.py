@@ -23,24 +23,30 @@ class StudentProfilerService:
 
     def build_profile(self, intake: StudentIntakeRequest) -> StudentProfile:
         corpus = self._build_corpus(intake)
-        rule_hard_skills = self._extract_keywords(corpus, self.repository.get_skill_lexicon())
-        llm_payload = self._extract_with_llm(intake)
+        skill_lexicon = self.repository.get_skill_lexicon()
+        soft_skill_lexicon = self.repository.get_soft_skill_lexicon()
+        rule_hard_skills = self._extract_keywords(corpus, skill_lexicon)
+        llm_payload = self._extract_with_llm(
+            intake,
+            skill_lexicon=skill_lexicon,
+            soft_skill_lexicon=soft_skill_lexicon,
+        )
 
         hard_skills = self._merge_terms(
             rule_hard_skills,
             intake.manual_skills,
-            self._filter_allowed(llm_payload.get('hard_skills', []), self.repository.get_skill_lexicon()),
+            self._filter_allowed(llm_payload.get('hard_skills', []), skill_lexicon),
         )
         certificates = self._merge_terms(intake.certificates, llm_payload.get('certificates', []))
         evidences = self._build_evidences(intake, llm_payload)
         soft_skill_assessments = self.soft_skill_assessor.assess(intake, hard_skills, evidences)
 
-        rule_soft_skills = self._extract_keywords(corpus, self.repository.get_soft_skill_lexicon())
+        rule_soft_skills = self._extract_keywords(corpus, soft_skill_lexicon)
         assessment_labels = self.soft_skill_assessor.labels_from_assessments(soft_skill_assessments)
         soft_skills = self._merge_terms(
             rule_soft_skills,
             assessment_labels,
-            self._filter_soft_skills(llm_payload.get('soft_skills', []), assessment_labels),
+            llm_payload.get('soft_skills', []),
         )
 
         completeness_score = self._compute_completeness(intake)
@@ -423,21 +429,45 @@ class StudentProfilerService:
                 result.append(text)
         return result
 
-    def _extract_with_llm(self, intake: StudentIntakeRequest) -> dict:
+    def _extract_with_llm(
+        self,
+        intake: StudentIntakeRequest,
+        skill_lexicon: Optional[list[str]] = None,
+        soft_skill_lexicon: Optional[list[str]] = None,
+    ) -> dict:
         if self.llm_client is None or not self.llm_client.enabled:
             return {}
 
-        prompt = self._build_llm_prompt(intake)
+        skill_lexicon = skill_lexicon or self.repository.get_skill_lexicon()
+        soft_skill_lexicon = soft_skill_lexicon or self.repository.get_soft_skill_lexicon()
+        job_families = self.repository.list_job_families()
+
+        prompt = self._build_llm_prompt_with_context(
+            intake=intake,
+            skill_lexicon=skill_lexicon,
+            soft_skill_lexicon=soft_skill_lexicon,
+            job_families=job_families,
+        )
         try:
             raw_text = self.llm_client.generate(prompt=prompt, system_prompt=STUDENT_PROFILE_SYSTEM_PROMPT)
         except Exception:
             return {}
 
         payload = try_parse_json(raw_text)
-        return payload if isinstance(payload, dict) else {}
+        if not isinstance(payload, dict):
+            return {}
+
+        payload['hard_skills'] = self._validate_skills(payload.get('hard_skills', []), skill_lexicon)
+        payload['soft_skills'] = self._validate_skills(payload.get('soft_skills', []), soft_skill_lexicon)
+        return payload
 
     @staticmethod
-    def _build_llm_prompt(intake: StudentIntakeRequest) -> str:
+    def _build_llm_prompt_with_context(
+        intake: StudentIntakeRequest,
+        skill_lexicon: list[str],
+        soft_skill_lexicon: list[str],
+        job_families: list,
+    ) -> str:
         payload = {
             'basic_info': intake.basic_info.dict(),
             'preference': intake.preference.dict(),
@@ -450,8 +480,32 @@ class StudentProfilerService:
             'certificates': intake.certificates,
             'follow_up_answers': [item.dict() for item in intake.follow_up_answers],
         }
+        available_jobs = [item.job_family for item in job_families[:20]]
+        context = {
+            'available_skills': skill_lexicon[:50],
+            'available_soft_skills': soft_skill_lexicon[:20],
+            'job_families': available_jobs,
+            'student_data': payload,
+        }
         return (
-            '\u8bf7\u4ece\u4ee5\u4e0b\u5b66\u751f\u8d44\u6599\u4e2d\u62bd\u53d6\u7ed3\u6784\u5316\u753b\u50cf\uff0c\u5e76\u4ec5\u8fd4\u56de JSON\u3002'
-            'JSON \u5b57\u6bb5\u5fc5\u987b\u5305\u542b hard_skills\u3001soft_skills\u3001certificates\u3001inferred_strengths\u3001inferred_gaps\u3001evidences\u3001summary\u3002\n'
-            f'{json.dumps(payload, ensure_ascii=False)}'
+            'Please extract a structured student profile and return JSON only.\n\n'
+            f'Available hard skills from knowledge base: {", ".join(context["available_skills"])}\n\n'
+            f'Available soft skills from knowledge base: {", ".join(context["available_soft_skills"])}\n\n'
+            f'Known job families from knowledge base: {", ".join(context["job_families"])}\n\n'
+            f'Student intake: {json.dumps(context["student_data"], ensure_ascii=False)}\n\n'
+            'Rules:\n'
+            '1. hard_skills must come from the available hard skill list.\n'
+            '2. soft_skills must come from the available soft skill list.\n'
+            '3. Ignore unsupported skills even if they appear in the text.\n'
+            '4. Return a JSON object with fields: hard_skills, soft_skills, certificates, inferred_strengths, inferred_gaps, evidences, summary.\n'
         )
+
+    @staticmethod
+    def _validate_skills(skills: list[str], lexicon: list[str]) -> list[str]:
+        lexicon_lower = {item.lower(): item for item in lexicon}
+        validated: list[str] = []
+        for skill in skills:
+            normalized = str(skill).strip().lower()
+            if normalized in lexicon_lower:
+                validated.append(lexicon_lower[normalized])
+        return validated
