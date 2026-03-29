@@ -3,8 +3,6 @@ from functools import lru_cache
 from backend.app.agents.orchestrator import CareerPlanningOrchestrator
 from backend.app.core.config import get_settings
 from backend.app.infra.llm.base import LLMClient, build_llm_client
-from backend.app.repositories.file_knowledge import FileKnowledgeRepository
-from backend.app.repositories.in_memory_knowledge import InMemoryKnowledgeRepository
 from backend.app.repositories.knowledge_repository import KnowledgeRepository
 from backend.app.repositories.neo4j_knowledge import Neo4jKnowledgeRepository
 from backend.app.services.follow_up_question import FollowUpQuestionService
@@ -22,18 +20,12 @@ from backend.app.services.student_profiler import StudentProfilerService
 @lru_cache()
 def get_repository() -> KnowledgeRepository:
     settings = get_settings()
-    if settings.knowledge_source == 'neo4j':
-        return Neo4jKnowledgeRepository(
-            uri=settings.neo4j_uri,
-            user=settings.neo4j_user,
-            password=settings.neo4j_password,
-            database=settings.neo4j_database,
-        )
-    if settings.knowledge_source == 'file':
-        if FileKnowledgeRepository.is_available(settings.knowledge_base_dir):
-            return FileKnowledgeRepository(settings.knowledge_base_dir)
-        return InMemoryKnowledgeRepository()
-    raise ValueError(f'Unsupported KNOWLEDGE_SOURCE: {settings.knowledge_source}')
+    return Neo4jKnowledgeRepository(
+        uri=settings.neo4j_uri,
+        user=settings.neo4j_user,
+        password=settings.neo4j_password,
+        database=settings.neo4j_database,
+    )
 
 
 @lru_cache()

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 try:
     from neo4j import GraphDatabase
@@ -16,42 +17,65 @@ from backend.app.schemas.graph import JobGraph, JobGraphEdge
 from backend.app.schemas.job import JobRequirementProfile
 
 
+JAVA_JOB = 'Java开发工程师'
+SENIOR_DEV_JOB = '高级开发工程师'
+TECH_LEAD_JOB = '技术负责人'
+ARCHITECT_JOB = '架构师'
+
+SKILL_MICROSERVICE = '微服务'
+SKILL_PERFORMANCE = '性能优化'
+SKILL_SYSTEM_DESIGN = '系统设计'
+SKILL_ARCH_DESIGN = '架构设计'
+SKILL_COLLAB = '跨团队协作'
+SKILL_REVIEW = '技术方案评审'
+SKILL_DISTRIBUTED = '分布式架构'
+SKILL_ABSTRACTION = '系统抽象'
+SKILL_ARCH_MINDSET = '架构思维'
+
+ABILITY_INNOVATION = '创新能力'
+ABILITY_COMMUNICATION = '沟通能力'
+ABILITY_STRESS = '抗压能力'
+ABILITY_LEARNING = '学习能力'
+ABILITY_EXECUTION = '执行力'
+
+DEFAULT_BASE_DIR = Path('data') / 'knowledge_base'
+
 EDGE_OVERRIDES: dict[tuple[str, str], dict[str, Any]] = {
-    ('Java开发工程师', '高级开发工程师'): {
+    (JAVA_JOB, SENIOR_DEV_JOB): {
         'success_rate': 0.86,
-        'time_cost': '1-2年',
+        'time_cost': '1-2 years',
         'difficulty': 'medium',
-        'required_skills': ['微服务', '性能优化', '系统设计'],
-        'evidence': ['catalog.vertical_growth_path', '后端工程经验积累规律'],
+        'required_skills': [SKILL_MICROSERVICE, SKILL_PERFORMANCE, SKILL_SYSTEM_DESIGN],
+        'evidence': ['catalog.vertical_growth_path', 'backend engineering growth pattern'],
         'case_count': 58,
         'weight': 0.92,
     },
-    ('高级开发工程师', '技术负责人'): {
+    (SENIOR_DEV_JOB, TECH_LEAD_JOB): {
         'success_rate': 0.79,
-        'time_cost': '1-2年',
+        'time_cost': '1-2 years',
         'difficulty': 'high',
-        'required_skills': ['架构设计', '跨团队协作', '技术方案评审'],
-        'evidence': ['catalog.vertical_growth_path', '团队技术主导能力演进'],
+        'required_skills': [SKILL_ARCH_DESIGN, SKILL_COLLAB, SKILL_REVIEW],
+        'evidence': ['catalog.vertical_growth_path', 'technical leadership capability evolution'],
         'case_count': 41,
         'weight': 0.85,
     },
-    ('技术负责人', '架构师'): {
+    (TECH_LEAD_JOB, ARCHITECT_JOB): {
         'success_rate': 0.72,
-        'time_cost': '1-2年',
+        'time_cost': '1-2 years',
         'difficulty': 'high',
-        'required_skills': ['分布式架构', '系统抽象', '架构思维'],
-        'evidence': ['catalog.vertical_growth_path', '架构岗位能力迁移要求'],
+        'required_skills': [SKILL_DISTRIBUTED, SKILL_ABSTRACTION, SKILL_ARCH_MINDSET],
+        'evidence': ['catalog.vertical_growth_path', 'architecture role transition pattern'],
         'case_count': 28,
         'weight': 0.8,
     },
 }
 
 ABILITY_DESCRIPTIONS = {
-    '创新能力': '能够提出新的解决方案并完成落地验证。',
-    '沟通能力': '能够在团队协作和跨角色场景中清晰表达。',
-    '抗压能力': '能在时间压力与复杂任务下稳定交付。',
-    '学习能力': '能够快速掌握新知识并迁移到实践。',
-    '执行力': '能够按计划推进并形成可验收交付物。',
+    ABILITY_INNOVATION: 'Able to propose differentiated solutions and validate them in practice.',
+    ABILITY_COMMUNICATION: 'Able to communicate clearly across team and stakeholder scenarios.',
+    ABILITY_STRESS: 'Able to deliver steadily under pressure and complexity.',
+    ABILITY_LEARNING: 'Able to learn quickly and transfer knowledge into project execution.',
+    ABILITY_EXECUTION: 'Able to drive tasks forward and produce deliverable outcomes.',
 }
 
 
@@ -135,7 +159,7 @@ def build_edge_payload(edge: JobGraphEdge, profiles: dict[str, JobRequirementPro
     override = EDGE_OVERRIDES.get((edge.source, edge.target), {})
     required_skills = list(override.get('required_skills') or edge.required_skills or infer_required_skills(source_profile, target_profile))
     success_rate = float(override.get('success_rate') or edge.success_rate or default_success_rate(edge.edge_type, edge.weight))
-    time_cost = str(override.get('time_cost') or edge.time_cost or ('1-2年' if relation_type == 'VERTICAL_TO' else '1-3年'))
+    time_cost = str(override.get('time_cost') or edge.time_cost or ('1-2 years' if relation_type == 'VERTICAL_TO' else '1-3 years'))
     evidence = list(override.get('evidence') or edge.evidence or [edge.reason or 'graph import', 'job_graph.json'])
     difficulty = str(override.get('difficulty') or edge.difficulty or infer_difficulty(required_skills, relation_type))
     case_count = int(override.get('case_count') or edge.case_count or infer_case_count(source_profile, target_profile))
@@ -155,10 +179,89 @@ def build_edge_payload(edge: JobGraphEdge, profiles: dict[str, JobRequirementPro
     }
 
 
+def build_city_payloads(job_payloads: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    city_counter: Counter[str] = Counter()
+    edge_payloads: list[dict[str, Any]] = []
+    for job in job_payloads:
+        cities = list(job.get('top_cities') or [])
+        if not cities:
+            continue
+        for index, city_name in enumerate(cities, start=1):
+            city_counter[city_name] += 1
+            edge_payloads.append(
+                {
+                    'job_name': job['name'],
+                    'city_name': city_name,
+                    'heat_score': round(max(0.35, 1.0 - (index - 1) * 0.15), 2),
+                    'job_count': max(1, int((job.get('sample_count') or 1) / max(len(cities), 1))),
+                }
+            )
+    city_payloads = [{'name': city, 'job_total': count} for city, count in sorted(city_counter.items())]
+    return city_payloads, edge_payloads
+
+
+def build_industry_payloads(job_payloads: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    industry_counter: Counter[str] = Counter()
+    edge_payloads: list[dict[str, Any]] = []
+    for job in job_payloads:
+        industries = list(job.get('top_industries') or [])
+        if not industries:
+            continue
+        market_share = round(1 / len(industries), 2)
+        for industry_name in industries:
+            industry_counter[industry_name] += 1
+            edge_payloads.append(
+                {
+                    'job_name': job['name'],
+                    'industry_name': industry_name,
+                    'market_share': market_share,
+                }
+            )
+    industry_payloads = [{'name': industry, 'job_total': count} for industry, count in sorted(industry_counter.items())]
+    return industry_payloads, edge_payloads
+
+
+def ensure_constraints(session) -> None:
+    statements = [
+        "CREATE CONSTRAINT job_name_unique IF NOT EXISTS FOR (j:Job) REQUIRE j.name IS UNIQUE",
+        "CREATE CONSTRAINT skill_name_unique IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE",
+        "CREATE CONSTRAINT ability_name_unique IF NOT EXISTS FOR (a:Ability) REQUIRE a.name IS UNIQUE",
+        "CREATE CONSTRAINT city_name_unique IF NOT EXISTS FOR (c:City) REQUIRE c.name IS UNIQUE",
+        "CREATE CONSTRAINT industry_name_unique IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
+        "CREATE INDEX job_name_idx IF NOT EXISTS FOR (j:Job) ON (j.name)",
+        "CREATE INDEX skill_name_idx IF NOT EXISTS FOR (s:Skill) ON (s.name)",
+        "CREATE INDEX ability_name_idx IF NOT EXISTS FOR (a:Ability) ON (a.name)",
+        "CREATE INDEX city_name_idx IF NOT EXISTS FOR (c:City) ON (c.name)",
+        "CREATE INDEX industry_name_idx IF NOT EXISTS FOR (i:Industry) ON (i.name)",
+        "CREATE INDEX transfer_success_rate_idx IF NOT EXISTS FOR ()-[r:TRANSFER_TO]-() ON (r.success_rate)",
+    ]
+    for statement in statements:
+        session.run(statement)
+
+
+def build_related_to_relationships(session) -> None:
+    session.run(
+        """
+        MATCH (j1:Job)-[:REQUIRES]->(s:Skill)<-[:REQUIRES]-(j2:Job)
+        WHERE j1.name < j2.name
+          AND coalesce(j1.node_type, 'job_family') = 'job_family'
+          AND coalesce(j2.node_type, 'job_family') = 'job_family'
+        WITH j1, j2, count(DISTINCT s) AS common_skills, collect(DISTINCT s.name)[0..8] AS shared_skills
+        WHERE common_skills >= 2
+        MERGE (j1)-[r:RELATED_TO]->(j2)
+        SET r.similarity_score = toFloat(common_skills),
+            r.shared_skills = shared_skills,
+            r.reason = 'Derived from shared skill lineage'
+        """
+    )
+
+
 def import_graph(uri: str, user: str, password: str, database: str, graph: JobGraph, profiles: dict[str, JobRequirementProfile], drop_existing: bool) -> None:
     driver = GraphDatabase.driver(uri, auth=(user, password))
     job_payloads = build_job_payloads(graph, profiles)
     edge_payloads = [build_edge_payload(edge, profiles) for edge in graph.edges]
+    city_payloads, city_edges = build_city_payloads(job_payloads)
+    industry_payloads, industry_edges = build_industry_payloads(job_payloads)
     skill_payloads: dict[str, dict[str, Any]] = {}
     ability_payloads: dict[str, dict[str, Any]] = {}
 
@@ -189,6 +292,8 @@ def import_graph(uri: str, user: str, password: str, database: str, graph: JobGr
     with driver.session(database=database) as session:
         if drop_existing:
             session.run('MATCH (n) DETACH DELETE n')
+
+        ensure_constraints(session)
 
         for job in job_payloads:
             session.run(
@@ -250,6 +355,45 @@ def import_graph(uri: str, user: str, password: str, database: str, graph: JobGr
                     },
                 )
 
+        for city in city_payloads:
+            session.run(
+                """
+                MERGE (c:City {name: $name})
+                SET c.job_total = $job_total
+                """,
+                city,
+            )
+        for edge in city_edges:
+            session.run(
+                """
+                MATCH (job:Job {name: $job_name})
+                MATCH (city:City {name: $city_name})
+                MERGE (job)-[r:LOCATED_IN]->(city)
+                SET r.heat_score = $heat_score,
+                    r.job_count = $job_count
+                """,
+                edge,
+            )
+
+        for industry in industry_payloads:
+            session.run(
+                """
+                MERGE (i:Industry {name: $name})
+                SET i.job_total = $job_total
+                """,
+                industry,
+            )
+        for edge in industry_edges:
+            session.run(
+                """
+                MATCH (job:Job {name: $job_name})
+                MATCH (industry:Industry {name: $industry_name})
+                MERGE (job)-[r:BELONGS_TO]->(industry)
+                SET r.market_share = $market_share
+                """,
+                edge,
+            )
+
         for edge in edge_payloads:
             session.run(
                 f"""
@@ -268,14 +412,16 @@ def import_graph(uri: str, user: str, password: str, database: str, graph: JobGr
                 edge,
             )
 
+        build_related_to_relationships(session)
+
     driver.close()
 
 
 def parse_args() -> argparse.Namespace:
     settings = get_settings()
     parser = argparse.ArgumentParser(description='Import local knowledge graph artifacts into Neo4j.')
-    parser.add_argument('--graph-path', default=str(Path(settings.knowledge_base_dir) / 'job_graph.json'))
-    parser.add_argument('--profile-path', default=str(Path(settings.knowledge_base_dir) / 'job_profiles.json'))
+    parser.add_argument('--graph-path', default=str(DEFAULT_BASE_DIR / 'job_graph.json'))
+    parser.add_argument('--profile-path', default=str(DEFAULT_BASE_DIR / 'job_profiles.json'))
     parser.add_argument('--uri', default=settings.neo4j_uri)
     parser.add_argument('--user', default=settings.neo4j_user)
     parser.add_argument('--password', default=settings.neo4j_password)

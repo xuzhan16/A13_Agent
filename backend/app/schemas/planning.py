@@ -31,6 +31,8 @@ class CareerPathOption(BaseModel):
     estimated_time_cost: str = ''
     missing_skills: list[str] = Field(default_factory=list)
     evidence_sources: list[str] = Field(default_factory=list)
+    related_jobs: list[str] = Field(default_factory=list)
+    common_entry_roles: list[str] = Field(default_factory=list)
 
 
 class ActionPlanItem(BaseModel):
@@ -152,6 +154,30 @@ class PersonalizedSubgraphRequest(BaseModel):
     student_skills: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     max_paths: int = 3
+
+
+class GraphEntityDetailRequest(BaseModel):
+    entity_id: str
+    node_type: str = 'job_family'
+
+
+class RelatedJobsRequest(BaseModel):
+    job: str
+    limit: int = 5
+
+
+class EntryPointsRequest(BaseModel):
+    target_job: str
+    max_steps: int = 5
+
+
+class JobInfluenceItem(BaseModel):
+    job: str
+    influence_score: float
+
+
+class JobInfluenceResponse(BaseModel):
+    ranking: list[JobInfluenceItem] = Field(default_factory=list)
 
 
 class PlanningMetadata(BaseModel):

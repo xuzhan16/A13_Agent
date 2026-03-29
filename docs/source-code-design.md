@@ -9,7 +9,7 @@ The source code design optimizes for four goals:
 - Explainability: every profile, score, path, and suggestion can be traced back to evidence.
 - Extensibility: rules, LLM augmentation, graph logic, and frontend visualization can evolve independently.
 - Demo readiness: the system must work in competition demos and answer "why" questions from judges.
-- Upgrade path: the project must support a smooth migration from local JSON graph data to Neo4j.
+- Graph-first architecture: Neo4j is the single source of truth for job, skill, ability, city, and industry relations.
 
 ## 2. Overall Architecture
 
@@ -26,7 +26,7 @@ The source code design optimizes for four goals:
 ### 2.2 Main Runtime Flow
 
 1. `etl/build_knowledge_base.py` builds local knowledge artifacts from raw xls data.
-2. `KnowledgeRepository` selects `FileKnowledgeRepository` or `Neo4jKnowledgeRepository` from config.
+2. `KnowledgeRepository` is fulfilled by `Neo4jKnowledgeRepository` through dependency injection.
 3. `ResumeParserService` extracts resume text.
 4. `ResumeStructuringService` produces structured fields and form-fill suggestions.
 5. `StudentProfilerService` builds the student profile and evidence pool.
@@ -197,22 +197,11 @@ It defines:
 
 Upper layers do not need to care whether the backing source is JSON or Neo4j.
 
-### 4.2 FileKnowledgeRepository
+### 4.2 Neo4jKnowledgeRepository
 
-The file repository reads:
+The Neo4j repository is now the single runtime knowledge source.
 
-- `job_profiles.json`,
-- `job_graph.json`.
-
-It is suitable for:
-
-- stable local demos,
-- offline operation,
-- environments without graph database dependencies.
-
-### 4.3 Neo4jKnowledgeRepository
-
-The Neo4j repository supports:
+It supports:
 
 - loading the full job graph,
 - querying all paths from role A to role B,
@@ -226,7 +215,7 @@ Compared with static JSON, Neo4j is better for questions such as:
 - which skills must be added step by step,
 - which graph slice should be shown to this specific student.
 
-### 4.4 Personalized Subgraph Aggregation
+### 4.3 Personalized Subgraph Aggregation
 
 The repository abstraction now exposes `get_personalized_subgraph()`.
 
@@ -260,14 +249,11 @@ Current outputs:
 
 This allows the frontend to render "View My Graph" without exposing Neo4j to the browser.
 
-### 4.5 Config-Based Switching
+### 4.4 Dependency Wiring
 
-`dependencies.py` switches repository implementation by `KNOWLEDGE_SOURCE`:
+`dependencies.py` now wires `Neo4jKnowledgeRepository` directly.
 
-- `file`,
-- `neo4j`.
-
-This preserves backward compatibility for upper layers.
+Upper layers still depend on the abstract `KnowledgeRepository` contract, so services remain decoupled from the concrete database client while runtime configuration is simplified to Neo4j-only settings.
 
 ## 5. ETL and Knowledge Construction
 
@@ -297,10 +283,15 @@ Imported graph content includes:
 - `Job` nodes,
 - `Skill` nodes,
 - `Ability` nodes,
+- `City` nodes,
+- `Industry` nodes,
 - `TRANSFER_TO` relations,
 - `VERTICAL_TO` relations,
 - `REQUIRES` relations,
-- `DEPENDS_ON` relations.
+- `DEPENDS_ON` relations,
+- `LOCATED_IN` relations,
+- `BELONGS_TO` relations,
+- `RELATED_TO` relations derived from shared skills.
 
 Supporting files include:
 

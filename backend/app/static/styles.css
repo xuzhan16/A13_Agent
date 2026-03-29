@@ -1108,6 +1108,67 @@ button:disabled {
   margin-bottom: 14px;
 }
 
+.graph-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) auto repeat(2, minmax(150px, 1fr)) auto auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.graph-toolbar-field {
+  display: grid;
+  gap: 6px;
+}
+
+.graph-toolbar-field span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.graph-toolbar-field input,
+.graph-toolbar-field select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(31, 35, 48, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 14px;
+  color: var(--ink);
+}
+
+.graph-toolbar .ghost-btn.active {
+  background: rgba(35, 74, 120, 0.12);
+  color: #234a78;
+  border-color: rgba(35, 74, 120, 0.24);
+}
+
+.graph-jump-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.graph-jump-btn {
+  border: 1px solid rgba(35, 74, 120, 0.12);
+  border-radius: 999px;
+  background: rgba(35, 74, 120, 0.06);
+  color: #234a78;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.graph-jump-btn:hover {
+  background: rgba(35, 74, 120, 0.12);
+}
+
+.graph-jump-btn.is-active {
+  border-color: rgba(45, 106, 79, 0.3);
+  background: rgba(45, 106, 79, 0.12);
+  color: #2d6a4f;
+}
+
 .personal-graph-summary {
   min-height: 0;
   display: grid;
@@ -1211,6 +1272,12 @@ button:disabled {
   stroke-width: 3;
 }
 
+.graph-node.selected circle {
+  stroke: rgba(18, 122, 118, 0.95);
+  stroke-width: 5;
+  filter: drop-shadow(0 10px 20px rgba(18, 122, 118, 0.22));
+}
+
 .graph-node.target_skill circle {
   stroke: rgba(35, 74, 120, 0.75);
   stroke-width: 3;
@@ -1224,5 +1291,167 @@ button:disabled {
   .graph-head-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+
+.graph-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.graph-canvas-shell {
+  min-width: 0;
+}
+
+.graph-canvas-frame {
+  border-radius: 26px;
+  border: 1px solid rgba(31, 35, 48, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 242, 232, 0.96));
+  padding: 14px;
+  min-height: 720px;
+  overflow: hidden;
+}
+
+.graph-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 680px;
+}
+
+.graph-detail-panel {
+  border-radius: 24px;
+  border: 1px solid rgba(31, 35, 48, 0.08);
+  background: rgba(255, 250, 243, 0.94);
+  padding: 18px;
+  min-height: 720px;
+  display: grid;
+  gap: 14px;
+}
+
+.graph-detail-body {
+  display: grid;
+  gap: 14px;
+}
+
+.graph-detail-body.empty-state {
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed rgba(31, 35, 48, 0.12);
+  border-radius: 18px;
+  padding: 28px 20px;
+  min-height: 220px;
+}
+
+.graph-detail-card,
+.graph-relation-card,
+.graph-path-card {
+  border-radius: 18px;
+  border: 1px solid rgba(31, 35, 48, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 14px 16px;
+}
+
+.graph-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.graph-detail-head h3 {
+  margin: 0;
+}
+
+.graph-detail-head p,
+.graph-relation-card p,
+.graph-path-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.graph-detail-grid,
+.graph-detail-section,
+.graph-relation-list,
+.graph-path-list,
+.graph-meta-pills {
+  display: grid;
+  gap: 10px;
+}
+
+.graph-meta-pills {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.graph-meta-pill {
+  border-radius: 14px;
+  background: rgba(35, 74, 120, 0.08);
+  color: #234a78;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.graph-detail-section strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node circle {
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.graph-node:hover circle {
+  transform: translateY(-1px);
+  filter: drop-shadow(0 8px 14px rgba(31, 35, 48, 0.16));
+}
+
+.graph-edge {
+  cursor: pointer;
+}
+
+.graph-node-label {
+  fill: #1f2330;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(255, 250, 243, 0.98);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.graph-label-bg {
+  fill: rgba(255, 250, 243, 0.94);
+  stroke: rgba(31, 35, 48, 0.08);
+  stroke-width: 1;
+}
+
+.graph-node.skill .graph-node-label {
+  font-size: 11px;
+}
+
+@media (max-width: 1200px) {
+  .graph-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .graph-toolbar .ghost-btn {
+    width: 100%;
+  }
+
+  .graph-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-detail-panel,
+  .graph-canvas-frame {
+    min-height: 0;
   }
 }

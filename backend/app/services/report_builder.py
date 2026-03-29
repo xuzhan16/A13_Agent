@@ -216,6 +216,10 @@ class ReportBuilderService:
                 lines.append(f'- 当前准备度：{option.readiness_score}%')
             if option.missing_skills:
                 lines.append(f'- 路径总缺口：{"、".join(option.missing_skills)}')
+            if option.related_jobs:
+                lines.append(f'- \u56fe\u8c31\u76f8\u90bb\u5c97\u4f4d\uff1a{chr(12289).join(option.related_jobs)}')
+            if option.common_entry_roles:
+                lines.append(f'- \u5e38\u89c1\u5165\u53e3\u5c97\u4f4d\uff1a{chr(12289).join(option.common_entry_roles)}')
             if option.evidence_sources:
                 lines.append(f'- 证据来源：{"；".join(option.evidence_sources)}')
             for step in option.steps:

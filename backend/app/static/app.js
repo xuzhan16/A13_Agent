@@ -1,4 +1,4 @@
-﻿const state = {
+const state = {
   graph: null,
   personalizedGraph: null,
   lastRequest: null,
@@ -6,6 +6,15 @@
   parsedResumeText: '',
   lastStructuredProfile: null,
   lastFormFillSuggestion: null,
+  graphInsights: null,
+  graphDetailCache: new Map(),
+  graphMode: 'global',
+  graphSearch: '',
+  graphCity: '',
+  graphIndustry: '',
+  graphNeighborOnly: false,
+  selectedGraphNodeId: '',
+  renderedGraph: null,
   selectedMatchIndex: 0,
 };
 
@@ -64,9 +73,20 @@ const els = {
   softSkillOverview: document.getElementById('softSkillOverview'),
   trendMeta: document.getElementById('trendMeta'),
   trendPanel: document.getElementById('trendPanel'),
+  graphInsightMeta: document.getElementById('graphInsightMeta'),
+  graphInsightPanel: document.getElementById('graphInsightPanel'),
   viewPersonalGraphBtn: document.getElementById('viewPersonalGraphBtn'),
   viewGlobalGraphBtn: document.getElementById('viewGlobalGraphBtn'),
+  graphSearchInput: document.getElementById('graphSearchInput'),
+  graphSearchBtn: document.getElementById('graphSearchBtn'),
+  graphCityFilter: document.getElementById('graphCityFilter'),
+  graphIndustryFilter: document.getElementById('graphIndustryFilter'),
+  graphNeighborBtn: document.getElementById('graphNeighborBtn'),
+  graphFilterResetBtn: document.getElementById('graphFilterResetBtn'),
+  graphToolbarHint: document.getElementById('graphToolbarHint'),
   personalGraphSummary: document.getElementById('personalGraphSummary'),
+  graphDetailMeta: document.getElementById('graphDetailMeta'),
+  graphDetailBody: document.getElementById('graphDetailBody'),
   matchContainer: document.getElementById('matchContainer'),
   graphSvg: document.getElementById('graphSvg'),
   executiveSummary: document.getElementById('executiveSummary'),
@@ -519,61 +539,70 @@ function buildResultNavigatorItems(response) {
   const followUps = response?.follow_up_questions || [];
   const evidenceDimensions = topMatch?.evidence_trace?.dimensions || [];
   const graphNodeCount = state.graph?.metadata?.node_count || state.graph?.nodes?.length || 0;
+  const graphInsightReady = Boolean(state.graphInsights?.focusJob);
 
   return [
     {
       key: 'soft-skill',
-      title: '软素质显式画像',
-      desc: softSkills.length ? `已输出 ${softSkills.length} 项能力评分` : '等待能力评分结果',
-      badge: softSkills.length ? '已生成' : '待生成',
+      title: '软素质画像',
+      desc: softSkills.length ? `已生成 ${softSkills.length} 项评分结果` : '等待生成软素质评分',
+      badge: softSkills.length ? '可查看' : '待生成',
       ready: softSkills.length > 0,
       targetId: 'softSkillSection',
     },
     {
       key: 'trend',
-      title: '行业趋势分析',
-      desc: trendRoleHeat.length ? `覆盖 ${trendRoleHeat.length} 个岗位热度信号` : '等待趋势分析结果',
-      badge: trendRoleHeat.length ? '已生成' : '待生成',
+      title: '行业趋势',
+      desc: trendRoleHeat.length ? `已生成 ${trendRoleHeat.length} 组趋势快照` : '等待生成趋势分析',
+      badge: trendRoleHeat.length ? '可查看' : '待生成',
       ready: trendRoleHeat.length > 0,
       targetId: 'trendSection',
     },
     {
       key: 'follow-up',
       title: 'Agent 追问',
-      desc: followUps.length ? `当前有 ${followUps.length} 条追问` : '当前无追问项',
-      badge: followUps.length ? '已生成' : '待生成',
+      desc: followUps.length ? `已生成 ${followUps.length} 个问题` : '等待生成追问',
+      badge: followUps.length ? '可查看' : '待生成',
       ready: true,
       targetId: 'followUpSection',
     },
     {
       key: 'match',
-      title: '岗位匹配结果',
-      desc: topMatch ? `Top1：${topMatch.job_family}（${topMatch.overall_score}）` : '等待匹配结果',
-      badge: topMatch ? '已生成' : '待生成',
+      title: '岗位匹配',
+      desc: topMatch ? `Top1：${topMatch.job_family}，${topMatch.overall_score} 分` : '等待生成匹配结果',
+      badge: topMatch ? '可查看' : '待生成',
       ready: matches.length > 0,
       targetId: 'matchSection',
     },
     {
       key: 'evidence',
       title: 'Evidence Trace',
-      desc: evidenceDimensions.length ? `包含 ${evidenceDimensions.length} 个评分维度` : '等待证据链结果',
-      badge: evidenceDimensions.length ? '已生成' : '待生成',
+      desc: evidenceDimensions.length ? `包含 ${evidenceDimensions.length} 个评分维度` : '等待评分证据链',
+      badge: evidenceDimensions.length ? '可查看' : '待生成',
       ready: evidenceDimensions.length > 0,
       targetId: 'evidenceSection',
     },
     {
+      key: 'graph-insight',
+      title: '图谱洞察',
+      desc: graphInsightReady ? `聚焦 ${state.graphInsights?.focusJob || '-'} 的个性化图谱分析` : '等待加载图谱洞察',
+      badge: graphInsightReady ? '可查看' : '待生成',
+      ready: graphInsightReady,
+      targetId: 'graphInsightSection',
+    },
+    {
       key: 'graph',
       title: '岗位图谱',
-      desc: graphNodeCount ? `当前图谱节点数 ${graphNodeCount}` : '图谱尚未加载',
-      badge: graphNodeCount ? '可查看' : '待生成',
+      desc: graphNodeCount ? `全局图谱节点 ${graphNodeCount}` : '等待图谱加载',
+      badge: graphNodeCount ? '可查看' : '待加载',
       ready: graphNodeCount > 0,
       targetId: 'graphSection',
     },
     {
       key: 'report',
-      title: '职业规划报告',
-      desc: response?.report?.executive_summary ? '已生成报告摘要与正文' : '等待报告内容',
-      badge: response?.report ? '已生成' : '待生成',
+      title: '职业报告',
+      desc: response?.report?.executive_summary ? '已生成完整职业规划报告' : '等待生成报告',
+      badge: response?.report ? '可查看' : '待生成',
       ready: Boolean(response?.report),
       targetId: 'reportSection',
     },
@@ -585,7 +614,7 @@ function renderResultNavigator(response) {
   if (!response) {
     setClassName(els.resultNavigator, 'result-nav-grid empty-state');
     setText(els.resultNavigator, '先生成职业报告，再从入口卡片跳转查看各部分结果。');
-    setText(els.resultNavigatorCount, '0/7');
+    setText(els.resultNavigatorCount, '0/8');
     return;
   }
   const items = buildResultNavigatorItems(response);
@@ -737,6 +766,143 @@ function renderIndustryTrend(trend) {
   `);
 }
 
+function formatRatioPercent(value) {
+  const num = Number(value);
+  if (Number.isNaN(num)) return '-';
+  return `${Math.round(num * 1000) / 10}%`;
+}
+
+function renderGraphInsights(insights) {
+  if (!els.graphInsightMeta || !els.graphInsightPanel) return;
+  if (!insights) {
+    setText(els.graphInsightMeta, 'pending');
+    setClassName(els.graphInsightPanel, 'trend-panel empty-state');
+    setText(els.graphInsightPanel, '生成报告后，这里会展示图谱洞察。');
+    return;
+  }
+
+  const relatedJobs = insights.relatedJobs || [];
+  const entryPoints = insights.entryPoints || [];
+  const ranking = insights.influenceRanking || [];
+  const clusterMembers = insights.clusterMembers || [];
+
+  setText(els.graphInsightMeta, `${insights.focusJob || '-'} | ${insights.targetJob || '-'}`);
+  setClassName(els.graphInsightPanel, 'trend-panel');
+  setHtml(els.graphInsightPanel, `
+    <section class="trend-block">
+      <div class="section-head minor">
+        <h3>相关岗位推荐</h3>
+      </div>
+      <div class="trend-card-grid">
+        ${relatedJobs.map((item) => `
+          <article class="trend-card">
+            <div class="trend-card-head">
+              <strong>${escapeHtml(item.job_family)}</strong>
+              <span class="badge confirmed">样本 ${escapeHtml(item.sample_count || 0)}</span>
+            </div>
+            <p>${escapeHtml(item.description || '暂无岗位说明')}</p>
+            <div class="trend-metric-list">
+              ${(item.required_skills || []).slice(0, 4).map((skill) => `<span class="pill">${escapeHtml(skill)}</span>`).join('') || '<span class="pill">暂无技能标签</span>'}
+            </div>
+            ${(item.evidence_snippets || []).length ? `<div class="structured-subtext">${escapeHtml(item.evidence_snippets.slice(0, 2).join(' / '))}</div>` : ''}
+          </article>
+        `).join('') || '<div class="empty-inline">暂无相关岗位推荐</div>'}
+      </div>
+    </section>
+    <section class="trend-block">
+      <div class="section-head minor">
+        <h3>目标岗位常见入口</h3>
+      </div>
+      <div class="stack-list">
+        ${entryPoints.map((item) => `
+          <article class="trend-shift-card">
+            <div class="trend-card-head">
+              <strong>${escapeHtml((item.jobs || []).join(' -> ') || '未找到路径')}</strong>
+              <span class="badge ${item.is_feasible ? 'confirmed' : 'pending'}">${escapeHtml(formatRatioPercent(item.cumulative_success_rate || 0))}</span>
+            </div>
+            <p>共 ${escapeHtml(item.steps)} 步 / 预计 ${escapeHtml(item.estimated_time_cost || '-')} / 难度 ${escapeHtml(item.difficulty || '-')}</p>
+            ${(item.missing_skills || []).length ? `<div class="structured-subtext">待补技能：${escapeHtml(item.missing_skills.join(', '))}</div>` : '<div class="structured-subtext">当前技能已覆盖这条路径的关键要求</div>'}
+          </article>
+        `).join('') || '<div class="empty-inline">暂无常见入口路径</div>'}
+      </div>
+    </section>
+    <section class="trend-block">
+      <div class="section-head minor">
+        <h3>岗位影响力</h3>
+      </div>
+      <div class="stack-list">
+        ${ranking.map((item, index) => `
+          <article class="advice-card${item.job === insights.focusJob ? ' emphasis' : ''}">${index + 1}. ${escapeHtml(item.job)} / 影响力 ${escapeHtml(item.influence_score)}</article>
+        `).join('') || '<div class="empty-inline">暂无影响力数据</div>'}
+      </div>
+    </section>
+    <section class="trend-block">
+      <div class="section-head minor">
+        <h3>岗位聚类</h3>
+      </div>
+      <div class="trend-metric-list">
+        ${clusterMembers.map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join('') || '<span class="pill">暂无聚类结果</span>'}
+      </div>
+    </section>
+  `);
+}
+
+async function loadGraphInsights(response) {
+  const topMatch = response?.match_results?.[0];
+  if (!topMatch) {
+    state.graphInsights = null;
+    renderGraphInsights(null);
+    return;
+  }
+
+  const primaryPath = getPrimaryPathOption(response);
+  const focusJob = topMatch.job_family;
+  const targetJob = primaryPath?.target_role || focusJob;
+  const tasks = {
+    relatedJobs: apiFetch('/api/v1/planning/graph/related-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job: focusJob, limit: 4 }),
+    }).then((res) => res.json()),
+    entryPoints: apiFetch('/api/v1/planning/graph/entry-points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_job: targetJob, max_steps: 4 }),
+    }).then((res) => res.json()),
+    influencePayload: apiFetch('/api/v1/planning/graph/job-influence').then((res) => res.json()),
+    clusters: apiFetch('/api/v1/planning/graph/job-clusters').then((res) => res.json()),
+  };
+
+  const settled = await Promise.allSettled(Object.values(tasks));
+  const keys = Object.keys(tasks);
+  const payload = {
+    relatedJobs: [],
+    entryPoints: [],
+    influencePayload: { ranking: [] },
+    clusters: {},
+  };
+
+  settled.forEach((result, index) => {
+    const key = keys[index];
+    if (result.status === 'fulfilled') {
+      payload[key] = result.value;
+      return;
+    }
+    console.warn(`Failed to load graph insight segment: ${key}`, result.reason);
+  });
+
+  const clusterMembers = Object.values(payload.clusters || {}).find((items) => Array.isArray(items) && items.includes(focusJob)) || [];
+  state.graphInsights = {
+    focusJob,
+    targetJob,
+    relatedJobs: payload.relatedJobs || [],
+    entryPoints: (payload.entryPoints || []).slice(0, 3),
+    influenceRanking: (payload.influencePayload?.ranking || []).slice(0, 5),
+    clusterMembers,
+  };
+  renderGraphInsights(state.graphInsights);
+}
+
 function renderMatches(matches) {
   if (!els.matchContainer) return;
   if (!matches?.length) {
@@ -873,6 +1039,10 @@ function polarPosition(cx, cy, radius, angle) {
   return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
 }
 
+function createSvgElement(tag) {
+  return document.createElementNS('http://www.w3.org/2000/svg', tag);
+}
+
 function breakLabel(label, chunkSize) {
   const result = [];
   let text = String(label || '');
@@ -884,78 +1054,554 @@ function breakLabel(label, chunkSize) {
   return result.slice(0, 3);
 }
 
-function renderGraph(graph) {
+function normalizeVector(dx, dy) {
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: dx / length, y: dy / length };
+}
+
+function estimateLabelBox(lines, fontSize) {
+  const maxLength = Math.max(...lines.map((line) => line.length), 1);
+  return {
+    width: maxLength * fontSize * 0.68 + 18,
+    height: lines.length * (fontSize + 4) + 10,
+  };
+}
+
+function formatMoneyRange(min, max) {
+  const minValue = Number(min);
+  const maxValue = Number(max);
+  const hasMin = Number.isFinite(minValue) && min !== null && min !== '';
+  const hasMax = Number.isFinite(maxValue) && max !== null && max !== '';
+  if (!hasMin && !hasMax) return '-';
+  if (hasMin && hasMax) return `${minValue} - ${maxValue} / 月`;
+  if (hasMin) return `${minValue}+ / 月`;
+  return `<= ${maxValue} / 月`;
+}
+
+function renderPillCollection(values, emptyText = '暂无数据') {
+  if (!values?.length) {
+    return `<span class="empty-inline">${escapeHtml(emptyText)}</span>`;
+  }
+  return values.map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join('');
+}
+
+function renderJumpPills(values, options = {}) {
+  const { emptyText = '暂无数据', nodeType = 'job_family', activeId = '' } = options;
+  if (!values?.length) {
+    return `<span class="empty-inline">${escapeHtml(emptyText)}</span>`;
+  }
+  return values.map((item) => {
+    const value = typeof item === 'string' ? item : (item?.id || item?.label || item?.target_id || '');
+    const label = typeof item === 'string' ? item : (item?.label || item?.id || item?.target_id || '');
+    const activeClass = value === activeId ? ' is-active' : '';
+    return `<button type="button" class="graph-jump-btn${activeClass}" data-graph-jump="${escapeHtml(value)}" data-node-type="${escapeHtml(nodeType)}">${escapeHtml(label)}</button>`;
+  }).join('');
+}
+
+function renderRelationCards(items, emptyText) {
+  if (!items?.length) {
+    return `<div class="empty-inline">${escapeHtml(emptyText)}</div>`;
+  }
+  return items.map((item) => `
+    <article class="graph-relation-card">
+      <div class="trend-card-head">
+        <strong>${escapeHtml(item.label || item.target_id || '-')}</strong>
+        <span class="badge confirmed">${escapeHtml(item.relation_type || '-')}</span>
+      </div>
+      <p>成功率 ${escapeHtml(formatRatioPercent(item.success_rate || 0))} / 时间 ${escapeHtml(item.time_cost || '-')} / 难度 ${escapeHtml(item.difficulty || '-')}</p>
+      ${(item.required_skills || []).length ? `<div class="structured-subtext">所需技能：${escapeHtml(item.required_skills.join(' / '))}</div>` : ''}
+      ${(item.evidence || []).length ? `<div class="structured-subtext">证据：${escapeHtml(item.evidence.join(' / '))}</div>` : ''}
+    </article>
+  `).join('');
+}
+
+function renderPathCards(paths, emptyText) {
+  if (!paths?.length) {
+    return `<div class="empty-inline">${escapeHtml(emptyText)}</div>`;
+  }
+  return paths.map((pathJobs) => `
+    <article class="graph-path-card">
+      <strong>${escapeHtml((pathJobs || []).join(' -> '))}</strong>
+    </article>
+  `).join('');
+}
+
+function renderGraphDetailPlaceholder(
+  message = '点击图谱中的节点或连线，查看岗位基础信息、城市分布、技能要求和转岗证据。',
+  meta = 'idle',
+) {
+  if (!els.graphDetailMeta || !els.graphDetailBody) return;
+  setText(els.graphDetailMeta, meta);
+  setClassName(els.graphDetailBody, 'graph-detail-body empty-state');
+  setText(els.graphDetailBody, message);
+}
+
+function renderGraphEdgeDetail(edge) {
+  if (!els.graphDetailMeta || !els.graphDetailBody) return;
+  setText(els.graphDetailMeta, '连线详情');
+  setClassName(els.graphDetailBody, 'graph-detail-body');
+  setHtml(els.graphDetailBody, `
+    <article class="graph-detail-card">
+      <div class="graph-detail-head">
+        <div>
+          <h3>${escapeHtml(edge.source)} -> ${escapeHtml(edge.target)}</h3>
+          <p>${escapeHtml(edge.reason || '转岗或成长关系的图谱连线。')}</p>
+        </div>
+        <span class="badge confirmed">${escapeHtml(edge.edge_type || '-')}</span>
+      </div>
+      <div class="graph-meta-pills">
+        <div class="graph-meta-pill">成功率<br /><strong>${escapeHtml(formatRatioPercent(edge.success_rate || 0))}</strong></div>
+        <div class="graph-meta-pill">时间成本<br /><strong>${escapeHtml(edge.time_cost || '-')}</strong></div>
+        <div class="graph-meta-pill">难度<br /><strong>${escapeHtml(edge.difficulty || '-')}</strong></div>
+        <div class="graph-meta-pill">Case Count<br /><strong>${escapeHtml(edge.case_count || 0)}</strong></div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>所需技能</strong>
+        <div class="trend-metric-list">${renderPillCollection(edge.required_skills, '暂无标注')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>待补技能</strong>
+        <div class="trend-metric-list">${renderPillCollection(edge.missing_skills, '当前未标注')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>证据来源</strong>
+        <div class="trend-metric-list">${renderPillCollection(edge.evidence, '暂无证据')}</div>
+      </div>
+    </article>
+  `);
+}
+
+function renderGraphEntityDetail(detail, fallbackNode) {
+  if (!els.graphDetailMeta || !els.graphDetailBody) return;
+  const nodeType = String(detail?.node_type || fallbackNode?.node_type || 'job_family');
+  const typeLabelMap = {
+    job_family: '岗位节点',
+    skill: '技能节点',
+    ability: '能力节点',
+  };
+  const title = detail?.label || fallbackNode?.label || detail?.entity_id || '-';
+  const description = detail?.description || fallbackNode?.description || '暂无详细说明';
+  const cities = uniqueList([...(detail?.cities || []), ...(detail?.top_cities || [])]);
+  const industries = uniqueList([...(detail?.industries || []), ...(detail?.top_industries || [])]);
+  const topSkills = uniqueList([...(detail?.top_skills || []), ...(detail?.required_skills || [])]);
+  const jumpJobs = uniqueList([...(detail?.recommended_jobs || []), ...(detail?.linked_jobs || [])]);
+
+  setText(els.graphDetailMeta, typeLabelMap[nodeType] || nodeType);
+  setClassName(els.graphDetailBody, 'graph-detail-body');
+  setHtml(els.graphDetailBody, `
+    <article class="graph-detail-card">
+      <div class="graph-detail-head">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(description)}</p>
+        </div>
+        <span class="badge confirmed">${escapeHtml(nodeType)}</span>
+      </div>
+      <div class="graph-meta-pills">
+        <div class="graph-meta-pill">样本量<br /><strong>${escapeHtml(detail?.sample_count || fallbackNode?.sample_count || 0)}</strong></div>
+        <div class="graph-meta-pill">影响力<br /><strong>${escapeHtml(detail?.influence_score || 0)}</strong></div>
+        <div class="graph-meta-pill">薪资区间<br /><strong>${escapeHtml(formatMoneyRange(detail?.salary_min_monthly, detail?.salary_max_monthly))}</strong></div>
+        <div class="graph-meta-pill">市场需求<br /><strong>${escapeHtml(detail?.market_demand || '-')}</strong></div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>高频技能</strong>
+        <div class="trend-metric-list">${renderPillCollection(topSkills, '暂无技能标签')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>核心要求</strong>
+        <div class="trend-metric-list">${renderPillCollection(detail?.required_skills, '??')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>加分项</strong>
+        <div class="trend-metric-list">${renderPillCollection(detail?.bonus_skills, '??')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>软素质 / 证书</strong>
+        <div class="trend-metric-list">${renderPillCollection(uniqueList([...(detail?.soft_skills || []), ...(detail?.certificates || [])]), '??')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>城市与行业</strong>
+        <div class="trend-metric-list">${renderPillCollection(uniqueList([...cities, ...industries]), '暂无区域或行业标签')}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>岗位推荐 / 一键跳转</strong>
+        <div class="graph-jump-list">${renderJumpPills(jumpJobs, { emptyText: '暂无可跳转岗位', activeId: state.selectedGraphNodeId })}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>纵向成长路径</strong>
+        <div class="graph-jump-list">${renderJumpPills(detail?.vertical_growth_path, { emptyText: '??', activeId: state.selectedGraphNodeId })}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>横向转岗方向</strong>
+        <div class="graph-jump-list">${renderJumpPills(detail?.transfer_paths, { emptyText: '??', activeId: state.selectedGraphNodeId })}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>常见入口路径</strong>
+        <div class="graph-path-list">${(detail?.entry_paths || []).length ? (detail.entry_paths || []).map((pathJobs) => `
+          <article class="graph-path-card">
+            <strong>${escapeHtml((pathJobs || []).join(' -> '))}</strong>
+            <div class="graph-jump-list">${renderJumpPills(pathJobs || [], { emptyText: '暂无路径节点', activeId: state.selectedGraphNodeId })}</div>
+          </article>
+        `).join('') : '<div class="empty-inline">暂无入口路径</div>'}</div>
+      </div>
+      <div class="graph-detail-section">
+        <strong>证据摘要</strong>
+        <div class="graph-path-list">${(detail?.evidence_snippets || []).length ? (detail.evidence_snippets || []).map((item) => `<article class="graph-path-card">${escapeHtml(item)}</article>`).join('') : '<div class="empty-inline">暂无额外证据摘要</div>'}</div>
+      </div>
+    </article>
+    <section class="graph-detail-section">
+      <strong>上游路径 / 入口岗位</strong>
+      <div class="graph-relation-list">${renderRelationCards(detail?.incoming_relations, '暂无上游关系')}</div>
+    </section>
+    <section class="graph-detail-section">
+      <strong>下游路径 / 可去岗位</strong>
+      <div class="graph-relation-list">${renderRelationCards(detail?.outgoing_relations, '暂无下游关系')}</div>
+    </section>
+  `);
+}
+
+async function loadGraphEntityDetail(node) {
+  if (!node || !els.graphDetailMeta || !els.graphDetailBody) return;
+  const entityId = node.node_type === 'skill' && String(node.id || '').startsWith('skill::') ? node.label : node.id;
+  const cacheKey = `${node.node_type}:${entityId}`;
+  if (state.graphDetailCache.has(cacheKey)) {
+    renderGraphEntityDetail(state.graphDetailCache.get(cacheKey), node);
+    return;
+  }
+
+  renderGraphDetailPlaceholder('正在加载节点详情...', 'loading');
+  try {
+    const response = await apiFetch('/api/v1/planning/graph/entity-detail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_id: entityId, node_type: node.node_type || 'job_family' }),
+    });
+    const payload = await response.json();
+    state.graphDetailCache.set(cacheKey, payload);
+    renderGraphEntityDetail(payload, node);
+  } catch (error) {
+    renderGraphDetailPlaceholder(`节点详情加载失败：${error.message}`, 'error');
+  }
+}
+
+function appendGraphNodeLabel(group, node, pos, radius, centerX, centerY) {
+  const lines = breakLabel(node.label, node.node_type === 'job_family' ? 6 : 5);
+  const fontSize = node.node_type === 'job_family' ? 13 : 11;
+  const lineHeight = fontSize + 3;
+  const vector = normalizeVector(pos.x - centerX, pos.y - centerY);
+  const anchor = Math.abs(vector.x) < 0.25 ? 'middle' : (vector.x > 0 ? 'start' : 'end');
+  const labelOffset = radius + (node.node_type === 'job_family' ? 22 : 18);
+  const labelX = pos.x + vector.x * labelOffset;
+  const labelY = pos.y + vector.y * labelOffset;
+  const box = estimateLabelBox(lines, fontSize);
+
+  const text = createSvgElement('text');
+  text.setAttribute('class', 'graph-node-label');
+  text.setAttribute('text-anchor', anchor);
+  text.setAttribute('font-size', String(fontSize));
+  const startY = labelY - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((lineText, index) => {
+    const tspan = createSvgElement('tspan');
+    tspan.setAttribute('x', String(labelX));
+    tspan.setAttribute('y', String(startY + index * lineHeight));
+    tspan.textContent = lineText;
+    text.appendChild(tspan);
+  });
+  group.appendChild(text);
+
+  let rectX = labelX - box.width / 2;
+  if (anchor === 'start') rectX = labelX - 8;
+  if (anchor === 'end') rectX = labelX - box.width + 8;
+  const rect = createSvgElement('rect');
+  rect.setAttribute('class', 'graph-label-bg');
+  rect.setAttribute('x', String(rectX));
+  rect.setAttribute('y', String(labelY - box.height / 2));
+  rect.setAttribute('rx', '12');
+  rect.setAttribute('ry', '12');
+  rect.setAttribute('width', String(box.width));
+  rect.setAttribute('height', String(box.height));
+  group.insertBefore(rect, text);
+}
+
+function getActiveGraphSource() {
+  if (state.graphMode === 'personal' && state.personalizedGraph) return state.personalizedGraph;
+  return state.graph;
+}
+
+function getGraphNodeById(graph, nodeId) {
+  if (!graph?.nodes?.length) return null;
+  return graph.nodes.find((node) => node.id === nodeId || node.label === nodeId || node.id === `skill::${nodeId}`) || null;
+}
+
+function findFirstMatchingGraphNode(graph, searchText) {
+  const query = String(searchText || '').trim().toLowerCase();
+  if (!query || !graph?.nodes?.length) return null;
+  return graph.nodes.find((node) => (
+    matchesGraphSearch(node, query)
+    && matchesGraphJobFilters(node, state.graphCity, state.graphIndustry)
+    && (node.node_type === 'job_family' || node.node_type === 'skill')
+  )) || null;
+}
+
+function matchesGraphSearch(node, query) {
+  const normalized = String(query || '').trim().toLowerCase();
+  if (!normalized) return true;
+  const haystack = [
+    node.id,
+    node.label,
+    node.description,
+    ...(node.top_skills || []),
+    ...(node.top_cities || []),
+    ...(node.top_industries || []),
+    ...(node.badges || []),
+  ].join(' ').toLowerCase();
+  return haystack.includes(normalized);
+}
+
+function matchesGraphJobFilters(node, city, industry) {
+  if (node.node_type !== 'job_family') return true;
+  if (city && !(node.top_cities || []).includes(city)) return false;
+  if (industry && !(node.top_industries || []).includes(industry)) return false;
+  return true;
+}
+
+function buildGraphView(graph) {
+  if (!graph) return null;
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  const searchText = String(state.graphSearch || '').trim().toLowerCase();
+  const hasSearch = Boolean(searchText);
+  const hasJobFilter = Boolean(state.graphCity || state.graphIndustry);
+  const matchedIds = new Set();
+
+  if (hasSearch || hasJobFilter) {
+    nodes.forEach((node) => {
+      if (!matchesGraphJobFilters(node, state.graphCity, state.graphIndustry)) return;
+      if (!matchesGraphSearch(node, searchText)) return;
+      matchedIds.add(node.id);
+    });
+  } else {
+    nodes.forEach((node) => matchedIds.add(node.id));
+  }
+
+  let visibleNodeIds = new Set();
+  if (!hasSearch && !hasJobFilter) {
+    nodes.forEach((node) => visibleNodeIds.add(node.id));
+  } else {
+    matchedIds.forEach((id) => visibleNodeIds.add(id));
+    edges.forEach((edge) => {
+      if (matchedIds.has(edge.source) || matchedIds.has(edge.target)) {
+        visibleNodeIds.add(edge.source);
+        visibleNodeIds.add(edge.target);
+      }
+    });
+  }
+
+  let visibleNodes = nodes.filter((node) => visibleNodeIds.has(node.id));
+  let visibleEdges = edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target));
+
+  if (state.graphNeighborOnly && state.selectedGraphNodeId) {
+    const focusId = state.selectedGraphNodeId;
+    const oneHopNodeIds = new Set([focusId]);
+    visibleEdges.forEach((edge) => {
+      if (edge.source === focusId) oneHopNodeIds.add(edge.target);
+      if (edge.target === focusId) oneHopNodeIds.add(edge.source);
+    });
+    visibleNodes = visibleNodes.filter((node) => oneHopNodeIds.has(node.id));
+    visibleEdges = visibleEdges.filter((edge) => oneHopNodeIds.has(edge.source) && oneHopNodeIds.has(edge.target));
+  }
+
+  return {
+    ...graph,
+    nodes: visibleNodes,
+    edges: visibleEdges,
+    metadata: {
+      ...(graph.metadata || {}),
+      source_mode: state.graphMode,
+      filtered_node_count: visibleNodes.length,
+      filtered_edge_count: visibleEdges.length,
+    },
+  };
+}
+
+function fillGraphSelectOptions(element, values, placeholder, currentValue) {
+  if (!element) return;
+  const options = [`<option value="">${escapeHtml(placeholder)}</option>`]
+    .concat(values.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`));
+  setHtml(element, options.join(''));
+  element.value = values.includes(currentValue) ? currentValue : '';
+}
+
+function populateGraphFilterOptions(graph) {
+  const jobNodes = (graph?.nodes || []).filter((node) => node.node_type === 'job_family');
+  const cities = uniqueList(jobNodes.flatMap((node) => node.top_cities || []));
+  const industries = uniqueList(jobNodes.flatMap((node) => node.top_industries || []));
+  fillGraphSelectOptions(els.graphCityFilter, cities, '全部城市', state.graphCity);
+  fillGraphSelectOptions(els.graphIndustryFilter, industries, '全部行业', state.graphIndustry);
+  state.graphCity = els.graphCityFilter?.value || '';
+  state.graphIndustry = els.graphIndustryFilter?.value || '';
+}
+
+function syncGraphToolbar(viewGraph) {
+  if (els.graphSearchInput && els.graphSearchInput.value !== state.graphSearch) {
+    els.graphSearchInput.value = state.graphSearch;
+  }
+  if (els.graphNeighborBtn) {
+    els.graphNeighborBtn.disabled = !state.selectedGraphNodeId;
+    els.graphNeighborBtn.classList.toggle('active', Boolean(state.graphNeighborOnly && state.selectedGraphNodeId));
+    els.graphNeighborBtn.textContent = state.graphNeighborOnly ? '退出一阶邻居' : '一阶邻居';
+  }
+  if (els.graphToolbarHint) {
+    const modeLabel = state.graphMode === 'personal' ? '当前为个性化子图' : '当前为全局图谱';
+    const focusLabel = state.selectedGraphNodeId ? ` · 已选中 ${state.selectedGraphNodeId}` : '';
+    const filterParts = [state.graphSearch && `搜索：${state.graphSearch}`, state.graphCity && `城市：${state.graphCity}`, state.graphIndustry && `行业：${state.graphIndustry}`].filter(Boolean);
+    const filterLabel = filterParts.length ? ` ? ${filterParts.join(' / ')}` : '';
+    const countLabel = viewGraph ? ` · 显示 ${viewGraph.nodes.length} 个节点 / ${viewGraph.edges.length} 条关系` : '';
+    setText(els.graphToolbarHint, `${modeLabel}${focusLabel}${filterLabel}${countLabel}`);
+  }
+}
+
+function applyGraphView(options = {}) {
+  const sourceGraph = getActiveGraphSource();
+  if (!sourceGraph) return;
+  populateGraphFilterOptions(sourceGraph);
+  const viewGraph = buildGraphView(sourceGraph);
+  state.renderedGraph = viewGraph;
+  renderGraph(viewGraph, options);
+  syncGraphToolbar(viewGraph);
+}
+
+async function focusGraphNode(nodeId, options = {}) {
+  const { resetFilters = false, showStatus = true } = options;
+  if (!nodeId) return;
+
+  let sourceGraph = getActiveGraphSource();
+  let node = getGraphNodeById(sourceGraph, nodeId);
+  if (!node && state.graph) {
+    node = getGraphNodeById(state.graph, nodeId);
+    if (node) {
+      state.graphMode = 'global';
+      sourceGraph = state.graph;
+      updateGraphMode(false);
+    }
+  }
+  if (!node) {
+    setStatus(`图谱中未找到节点：${nodeId}`, 'error');
+    return;
+  }
+
+  if (resetFilters) {
+    state.graphSearch = '';
+    state.graphCity = '';
+    state.graphIndustry = '';
+  }
+  state.selectedGraphNodeId = node.id;
+  state.graphNeighborOnly = true;
+  applyGraphView({ resetDetail: false });
+  await loadGraphEntityDetail(node);
+  if (showStatus) {
+    setStatus(`已聚焦节点：${node.label}`, 'success');
+  }
+}
+
+function renderGraph(graph, options = {}) {
   if (!graph) return;
   const svg = els.graphSvg;
   if (!svg) return;
   svg.innerHTML = '';
-  const width = 1100;
-  const height = 620;
+  svg.setAttribute('viewBox', '0 0 1320 760');
+  const width = 1320;
+  const height = 760;
   const centerX = width / 2;
   const centerY = height / 2;
+
+  if (!graph.nodes?.length) {
+    const empty = createSvgElement('text');
+    empty.setAttribute('x', String(centerX));
+    empty.setAttribute('y', String(centerY));
+    empty.setAttribute('text-anchor', 'middle');
+    empty.setAttribute('fill', '#6a6d73');
+    empty.setAttribute('font-size', '18');
+    empty.textContent = '当前筛选条件下没有可展示的图谱节点';
+    svg.appendChild(empty);
+    setText(els.heroGraphNodes, '0');
+    if (options.resetDetail !== false) renderGraphDetailPlaceholder('当前筛选条件下没有可展示的节点，请调整搜索或筛选条件。', 'empty');
+    return;
+  }
+
   const jobNodes = graph.nodes.filter((node) => node.node_type === 'job_family');
   const stageNodes = graph.nodes.filter((node) => node.node_type !== 'job_family');
   const positionMap = new Map();
+  const jobRingRadius = Math.min(250, 190 + jobNodes.length * 5);
+  const outerRingRadius = Math.min(360, 285 + stageNodes.length * 2);
 
   jobNodes.forEach((node, index) => {
     const angle = (Math.PI * 2 * index) / Math.max(jobNodes.length, 1) - Math.PI / 2;
-    positionMap.set(node.id, polarPosition(centerX, centerY, 170, angle));
+    positionMap.set(node.id, polarPosition(centerX, centerY, jobRingRadius, angle));
   });
   stageNodes.forEach((node, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(stageNodes.length, 1) - Math.PI / 2 + 0.18;
-    positionMap.set(node.id, polarPosition(centerX, centerY, 265, angle));
+    const angle = (Math.PI * 2 * index) / Math.max(stageNodes.length, 1) - Math.PI / 2 + 0.12;
+    positionMap.set(node.id, polarPosition(centerX, centerY, outerRingRadius, angle));
   });
 
   graph.edges.forEach((edge) => {
     const source = positionMap.get(edge.source);
     const target = positionMap.get(edge.target);
     if (!source || !target) return;
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', source.x);
-    line.setAttribute('y1', source.y);
-    line.setAttribute('x2', target.x);
-    line.setAttribute('y2', target.y);
-    line.setAttribute('class', `graph-edge ${edge.edge_type}`);
+    const line = createSvgElement('line');
+    line.setAttribute('x1', String(source.x));
+    line.setAttribute('y1', String(source.y));
+    line.setAttribute('x2', String(target.x));
+    line.setAttribute('y2', String(target.y));
+    line.setAttribute('class', `graph-edge ${normalizeGraphEdgeType(edge.edge_type)} ${edge.highlight || ''}`.trim());
+    line.addEventListener('click', (event) => {
+      event.stopPropagation();
+      renderGraphEdgeDetail(edge);
+    });
     svg.appendChild(line);
   });
 
   graph.nodes.forEach((node) => {
     const pos = positionMap.get(node.id);
     if (!pos) return;
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('class', 'graph-node');
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    const radius = node.node_type === 'job_family' ? 38 : 26;
-    circle.setAttribute('cx', pos.x);
-    circle.setAttribute('cy', pos.y);
-    circle.setAttribute('r', radius);
+    const group = createSvgElement('g');
+    const activeClass = node.id === state.selectedGraphNodeId ? 'selected' : '';
+    group.setAttribute('class', `graph-node ${node.node_type || ''} ${node.highlight || ''} ${activeClass}`.trim());
+    const circle = createSvgElement('circle');
+    const radius = node.node_type === 'job_family' ? 32 : 20;
+    circle.setAttribute('cx', String(pos.x));
+    circle.setAttribute('cy', String(pos.y));
+    circle.setAttribute('r', String(radius));
     circle.setAttribute('fill', node.node_type === 'job_family' ? '#c85b3d' : '#234a78');
-    circle.setAttribute('fill-opacity', node.node_type === 'job_family' ? '0.9' : '0.85');
-    g.appendChild(circle);
+    circle.setAttribute('fill-opacity', node.node_type === 'job_family' ? '0.92' : '0.9');
+    group.appendChild(circle);
 
-    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-    title.textContent = `${node.label}\n样本数：${node.sample_count || 0}\n技能：${(node.top_skills || []).join('、')}`;
-    g.appendChild(title);
+    const title = createSvgElement('title');
+    title.textContent = `${node.label}\n样本：${node.sample_count || 0}\n说明：${node.description || '-'}`;
+    group.appendChild(title);
 
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', pos.x);
-    text.setAttribute('y', pos.y - 4);
-    text.setAttribute('text-anchor', 'middle');
-    const lines = breakLabel(node.label, node.node_type === 'job_family' ? 7 : 5);
-    lines.forEach((lineText, idx) => {
-      const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-      tspan.setAttribute('x', pos.x);
-      tspan.setAttribute('dy', idx === 0 ? '0' : '14');
-      tspan.textContent = lineText;
-      text.appendChild(tspan);
+    svg.appendChild(group);
+    appendGraphNodeLabel(group, node, pos, radius, centerX, centerY);
+    group.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      state.selectedGraphNodeId = node.id;
+      state.graphNeighborOnly = true;
+      applyGraphView({ resetDetail: false });
+      await loadGraphEntityDetail(node);
+      syncGraphToolbar(state.renderedGraph || graph);
     });
-    text.setAttribute('fill', '#fffaf3');
-    text.setAttribute('font-size', node.node_type === 'job_family' ? '12' : '11');
-    g.appendChild(text);
-    svg.appendChild(g);
   });
 
-  setText(els.heroGraphNodes, String(graph.metadata?.node_count || graph.nodes.length));
+  svg.onclick = () => {
+    if (state.selectedGraphNodeId || state.graphNeighborOnly) {
+      state.selectedGraphNodeId = '';
+      state.graphNeighborOnly = false;
+      applyGraphView({ resetDetail: false });
+    }
+    renderGraphDetailPlaceholder();
+  };
+  if (options.resetDetail !== false) renderGraphDetailPlaceholder();
+  setText(els.heroGraphNodes, String(graph.metadata?.filtered_node_count || graph.nodes.length));
 }
 
 function uniqueList(values) {
@@ -988,7 +1634,12 @@ function getStudentSkillList(response) {
 
 function normalizeGraphEdgeType(value) {
   const text = String(value || '').toLowerCase();
-  return text.includes('vertical') ? 'vertical' : 'transfer';
+  if (text.includes('vertical')) return 'vertical';
+  if (text.includes('require')) return 'requires';
+  if (text.includes('has_skill') || text.includes('owned_skill')) return 'owned_skill';
+  if (text.includes('missing_skill')) return 'missing_skill';
+  if (text.includes('target_skill')) return 'target_skill';
+  return text.includes('transfer') ? 'transfer' : text || 'transfer';
 }
 
 function updateGraphMode(isPersonal) {
@@ -996,29 +1647,29 @@ function updateGraphMode(isPersonal) {
   if (els.viewGlobalGraphBtn) els.viewGlobalGraphBtn.disabled = !isPersonal;
 }
 
-function renderPersonalGraphSummary(option, evidence) {
+function renderPersonalGraphSummary(summary, option) {
   if (!els.personalGraphSummary) return;
-  const pathJobs = option?.path_jobs || [];
+  const pathJobs = summary?.selected_path || option?.path_jobs || [];
   const missingSkills = uniqueList([
-    ...(evidence?.aggregated_missing_skills || []),
+    ...(summary?.missing_skills || []),
     ...(option?.missing_skills || []),
   ]);
   setClassName(els.personalGraphSummary, 'personal-graph-summary');
   setHtml(els.personalGraphSummary, `
     <article class="trend-card">
       <div class="trend-card-head">
-        <strong>${escapeHtml(option?.path_name || '个性化职业子图')}</strong>
-        <span class="badge confirmed">目标：${escapeHtml(option?.target_role || pathJobs[pathJobs.length - 1] || '-')}</span>
+        <strong>${escapeHtml(option?.path_name || '个性化路径')}</strong>
+        <span class="badge confirmed">目标：${escapeHtml(summary?.target_job || option?.target_role || pathJobs[pathJobs.length - 1] || '-')}</span>
       </div>
-      <p>${escapeHtml(option?.fit_reason || '基于当前报告中的最优路径，生成当前学生的个性化职业子图。')}</p>
+      <p>${escapeHtml(option?.fit_reason || '该子图聚焦当前学生最值得优先查看的职业路径、缺口技能和证据来源。')}</p>
       <div class="trend-metric-list">
-        <span class="pill">路径：${escapeHtml(pathJobs.join(' → ') || '-')}</span>
-        <span class="pill">准备度：${escapeHtml(option?.readiness_score || '-')}</span>
-        <span class="pill">成功率：${escapeHtml(option?.estimated_success_rate || '-')}</span>
-        <span class="pill">时间成本：${escapeHtml(option?.estimated_time_cost || '-')}</span>
+        <span class="pill">路径：${escapeHtml(pathJobs.join(' -> ') || '-')}</span>
+        <span class="pill">准备度：${escapeHtml(summary?.readiness_score ?? option?.readiness_score ?? '-')}</span>
+        <span class="pill">成功率：${escapeHtml(summary?.estimated_success_rate ?? option?.estimated_success_rate ?? '-')}</span>
+        <span class="pill">时间成本：${escapeHtml(summary?.estimated_time_cost || option?.estimated_time_cost || '-')}</span>
       </div>
-      <div class="structured-subtext">待补技能：${escapeHtml(missingSkills.join('、') || '当前路径关键技能已基本覆盖')}</div>
-      <div class="structured-subtext">证据来源：${escapeHtml((evidence?.evidence_sources || option?.evidence_sources || []).join('；') || '路径规划与知识图谱')}</div>
+      <div class="structured-subtext">缺口技能：${escapeHtml(missingSkills.join(', ') || '当前没有识别到关键缺口')}</div>
+      <div class="structured-subtext">证据来源：${escapeHtml((summary?.evidence_sources || option?.evidence_sources || []).join(' / ') || '当前没有额外证据')}</div>
     </article>
   `);
 }
@@ -1029,110 +1680,42 @@ function renderGraphPlaceholder(message) {
   setText(els.personalGraphSummary, message);
 }
 
-function buildPersonalGraph(option, evidence) {
-  const pathJobs = uniqueList(option?.path_jobs || []);
-  const edgeChain = evidence?.edge_chain || [];
-  const nodes = pathJobs.map((job, index) => ({
-    id: job,
-    label: job,
-    node_type: 'job_family',
-    sample_count: 0,
-    top_skills: index === pathJobs.length - 1 ? (evidence?.aggregated_required_skills || []).slice(0, 4) : [],
-    description: index === 0 ? '当前推荐起点' : index === pathJobs.length - 1 ? '目标岗位' : '路径节点',
-  }));
-  const missingSkillNodes = uniqueList([
-    ...(evidence?.aggregated_missing_skills || []),
-    ...(option?.missing_skills || []),
-  ]).slice(0, 4).map((skill) => ({
-    id: `skill:${skill}`,
-    label: skill,
-    node_type: 'skill',
-    sample_count: 0,
-    top_skills: [],
-    description: '待补齐技能',
-  }));
-  const pathEdges = edgeChain.length
-    ? edgeChain.map((edge) => ({
-      source: edge.source_job,
-      target: edge.target_job,
-      edge_type: normalizeGraphEdgeType(edge.relation_type),
-      weight: edge.success_rate || 0,
-      reason: (edge.evidence || []).join('；'),
-      success_rate: edge.success_rate || 0,
-      time_cost: edge.time_cost || '',
-      difficulty: edge.difficulty || 'medium',
-      required_skills: edge.required_skills || [],
-      evidence: edge.evidence || [],
-      case_count: edge.case_count || 0,
-    }))
-    : pathJobs.slice(0, -1).map((job, index) => ({
-      source: job,
-      target: pathJobs[index + 1],
-      edge_type: 'vertical',
-      weight: 0.7,
-      reason: '来自职业路径规划结果',
-      success_rate: 0.7,
-      time_cost: '',
-      difficulty: 'medium',
-      required_skills: [],
-      evidence: ['职业路径规划结果'],
-      case_count: 0,
-    }));
-  const skillEdges = missingSkillNodes.map((skillNode) => ({
-    source: pathJobs[pathJobs.length - 1] || option?.target_role || '目标岗位',
-    target: skillNode.id,
-    edge_type: 'transfer',
-    weight: 0.5,
-    reason: '该路径的关键缺口技能',
-    success_rate: 0,
-    time_cost: '',
-    difficulty: 'medium',
-    required_skills: [skillNode.label],
-    evidence: ['路径证据链'],
-    case_count: 0,
-  }));
-  return {
-    nodes: [...nodes, ...missingSkillNodes],
-    edges: [...pathEdges, ...skillEdges],
-    metadata: {
-      node_count: nodes.length + missingSkillNodes.length,
-      edge_count: pathEdges.length + skillEdges.length,
-      mode: 'personalized',
-    },
-  };
-}
-
 async function viewPersonalGraph() {
   if (!state.lastReportResponse) {
     setStatus('请先生成职业报告，再查看个人图谱。', 'error');
     return;
   }
   const option = getPrimaryPathOption(state.lastReportResponse);
-  if (!option || !(option.path_jobs || []).length) {
-    setStatus('当前报告没有可展示的职业路径。', 'error');
+  const topMatch = state.lastReportResponse.match_results?.[0];
+  if (!option || !topMatch) {
+    setStatus('当前报告中还没有可用的路径结果。', 'error');
     return;
   }
 
-  let evidence = null;
   try {
-    const response = await apiFetch('/api/v1/planning/graph/path-evidence', {
+    const response = await apiFetch('/api/v1/planning/graph/personalized-subgraph', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path_jobs: option.path_jobs || [],
+        focus_job: topMatch.job_family,
+        target_job: option.target_role || null,
+        recommended_jobs: (state.lastReportResponse.match_results || []).slice(0, 3).map((item) => item.job_family),
         student_skills: getStudentSkillList(state.lastReportResponse),
+        missing_skills: uniqueList([...(topMatch.missing_skills || []), ...(option.missing_skills || [])]),
+        max_paths: 3,
       }),
     });
-    evidence = await response.json();
+    state.personalizedGraph = await response.json();
+    state.graphMode = 'personal';
+    state.selectedGraphNodeId = state.personalizedGraph.summary?.focus_job || topMatch.job_family;
+    state.graphNeighborOnly = true;
+    renderPersonalGraphSummary(state.personalizedGraph.summary, option);
+    updateGraphMode(true);
+    applyGraphView({ resetDetail: true });
+    setStatus('已切换到个人子图。', 'success');
   } catch (error) {
-    console.warn('Failed to load path evidence for personal graph.', error);
+    setStatus(`查看个人图谱失败：${error.message}`, 'error');
   }
-
-  state.personalizedGraph = buildPersonalGraph(option, evidence);
-  renderGraph(state.personalizedGraph);
-  renderPersonalGraphSummary(option, evidence);
-  updateGraphMode(true);
-  setStatus('已切换到当前学生的个性化子图。', 'success');
 }
 
 function viewGlobalGraph() {
@@ -1140,9 +1723,12 @@ function viewGlobalGraph() {
     setStatus('全局图谱尚未加载完成。', 'error');
     return;
   }
-  renderGraph(state.graph);
-  renderGraphPlaceholder(state.lastReportResponse ? '已恢复全局图谱，可再次点击“查看我的图谱”切换到个性化子图。' : '先生成职业报告，再点击“查看我的图谱”。');
+  state.graphMode = 'global';
+  state.selectedGraphNodeId = '';
+  state.graphNeighborOnly = false;
   updateGraphMode(false);
+  applyGraphView({ resetDetail: true });
+  renderGraphPlaceholder(state.lastReportResponse ? '已恢复全局图谱，你可以随时再次查看个人子图。' : '已显示全局图谱，先生成报告后可查看个人子图。');
   setStatus('已恢复全局图谱。', 'success');
 }
 
@@ -1160,7 +1746,8 @@ async function loadGraph() {
   try {
     const response = await apiFetch('/api/v1/planning/job-graph');
     state.graph = await response.json();
-    renderGraph(state.graph);
+    state.graphMode = 'global';
+    applyGraphView({ resetDetail: true });
     renderGraphPlaceholder(state.lastReportResponse ? '报告已更新，可点击“查看我的图谱”切换到个性化子图。' : '先生成职业报告，再点击“查看我的图谱”。');
     updateGraphMode(false);
   } catch (error) {
@@ -1216,21 +1803,29 @@ async function generateReport() {
     const data = await response.json();
     state.lastReportResponse = data;
     state.personalizedGraph = null;
+    state.graphInsights = null;
+    state.selectedGraphNodeId = '';
+    state.graphNeighborOnly = false;
     state.selectedMatchIndex = 0;
     renderMetrics(data);
     renderMatches(data.match_results);
     renderFollowUps(data.follow_up_questions);
     renderSoftSkillAssessments(data.student_profile?.soft_skill_assessments);
     renderIndustryTrend(data.report?.industry_trend);
+    renderGraphInsights(null);
     renderReport(data.report);
     renderEvidenceTrace(data.match_results?.[state.selectedMatchIndex]);
-    renderResultNavigator(data);
-    renderGraphPlaceholder('报告已生成，可点击“查看我的图谱”切换到个性化子图。');
+    renderGraphPlaceholder('生成报告后，可切换查看个人子图。');
     updateGraphMode(false);
-    if (state.graph) renderGraph(state.graph);
-    setStatus('职业报告生成完成。', 'success');
+    if (state.graph) {
+      state.graphMode = 'global';
+      applyGraphView({ resetDetail: true });
+    }
+    await loadGraphInsights(data);
+    renderResultNavigator(data);
+    setStatus('职业报告已生成。', 'success');
   } catch (error) {
-    setStatus(`职业报告生成失败：${error.message}`, 'error');
+    setStatus(`生成职业报告失败：${error.message}`, 'error');
   }
 }
 
@@ -1277,6 +1872,57 @@ function bindEvents() {
   document.getElementById('downloadJsonBtn')?.addEventListener('click', downloadJson);
   els.viewPersonalGraphBtn?.addEventListener('click', viewPersonalGraph);
   els.viewGlobalGraphBtn?.addEventListener('click', viewGlobalGraph);
+  els.graphSearchBtn?.addEventListener('click', async () => {
+    const sourceGraph = getActiveGraphSource();
+    state.graphSearch = els.graphSearchInput?.value.trim() || '';
+    if (!state.graphSearch) {
+      applyGraphView({ resetDetail: false });
+      return;
+    }
+    const found = findFirstMatchingGraphNode(sourceGraph, state.graphSearch);
+    if (!found) {
+      applyGraphView({ resetDetail: false });
+      setStatus(`未找到匹配节点：${state.graphSearch}`, 'error');
+      return;
+    }
+    await focusGraphNode(found.id, { showStatus: false });
+    setStatus(`已定位到节点：${found.label}`, 'success');
+  });
+  els.graphSearchInput?.addEventListener('keydown', async (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    els.graphSearchBtn?.click();
+  });
+  els.graphCityFilter?.addEventListener('change', () => {
+    state.graphCity = els.graphCityFilter?.value || '';
+    applyGraphView({ resetDetail: false });
+  });
+  els.graphIndustryFilter?.addEventListener('change', () => {
+    state.graphIndustry = els.graphIndustryFilter?.value || '';
+    applyGraphView({ resetDetail: false });
+  });
+  els.graphNeighborBtn?.addEventListener('click', () => {
+    if (!state.selectedGraphNodeId) return;
+    state.graphNeighborOnly = !state.graphNeighborOnly;
+    applyGraphView({ resetDetail: false });
+  });
+  els.graphFilterResetBtn?.addEventListener('click', () => {
+    state.graphSearch = '';
+    state.graphCity = '';
+    state.graphIndustry = '';
+    state.selectedGraphNodeId = '';
+    state.graphNeighborOnly = false;
+    if (els.graphSearchInput) els.graphSearchInput.value = '';
+    applyGraphView({ resetDetail: true });
+    setStatus('已重置图谱搜索与筛选条件。', 'success');
+  });
+  els.graphDetailBody?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-graph-jump]');
+    if (!button) return;
+    const nodeId = button.dataset.graphJump || '';
+    if (!nodeId) return;
+    await focusGraphNode(nodeId, { resetFilters: true });
+  });
   els.resultNavigator?.addEventListener('click', (event) => {
     const button = event.target.closest('.result-entry-btn');
     if (!button) return;

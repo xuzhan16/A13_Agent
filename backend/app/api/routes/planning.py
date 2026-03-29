@@ -6,17 +6,22 @@ from fastapi.responses import Response
 from backend.app.agents.orchestrator import CareerPlanningOrchestrator
 from backend.app.dependencies import get_orchestrator, get_repository, get_resume_parser, get_resume_structurer
 from backend.app.repositories.knowledge_repository import KnowledgeRepository
-from backend.app.schemas.graph import JobGraph
+from backend.app.schemas.graph import GraphEntityDetail, JobGraph
 from backend.app.schemas.job import JobRequirementProfile
 from backend.app.schemas.planning import (
     CareerPlanningRequest,
     CareerPlanningResponse,
+    EntryPointsRequest,
+    GraphEntityDetailRequest,
     FollowUpQuestionRequest,
     FollowUpQuestionResponse,
+    JobInfluenceItem,
+    JobInfluenceResponse,
     PathEvidenceRequest,
     PathEvidenceResponse,
     PersonalizedPathQueryRequest,
     PersonalizedSubgraphRequest,
+    RelatedJobsRequest,
     TransferPathQueryRequest,
     TransferPathResult,
 )
@@ -91,6 +96,50 @@ def get_personalized_subgraph(
         missing_skills=request.missing_skills,
         max_paths=request.max_paths,
     )
+
+
+@router.post('/graph/entity-detail', response_model=GraphEntityDetail)
+def get_graph_entity_detail(
+    request: GraphEntityDetailRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> GraphEntityDetail:
+    return repository.get_graph_entity_detail(
+        entity_id=request.entity_id,
+        node_type=request.node_type,
+    )
+
+
+@router.post('/graph/related-jobs', response_model=List[JobRequirementProfile])
+def get_related_jobs(
+    request: RelatedJobsRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> List[JobRequirementProfile]:
+    return repository.get_job_recommendations(job=request.job, limit=request.limit)
+
+
+@router.get('/graph/job-clusters', response_model=dict[str, list[str]])
+def get_job_clusters(
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> dict[str, list[str]]:
+    return repository.get_job_clusters()
+
+
+@router.get('/graph/job-influence', response_model=JobInfluenceResponse)
+def get_job_influence(
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> JobInfluenceResponse:
+    ranking = repository.get_job_influence_ranking()
+    return JobInfluenceResponse(
+        ranking=[JobInfluenceItem(job=job, influence_score=score) for job, score in ranking]
+    )
+
+
+@router.post('/graph/entry-points', response_model=List[TransferPathResult])
+def get_entry_points(
+    request: EntryPointsRequest,
+    repository: KnowledgeRepository = Depends(get_repository),
+) -> List[TransferPathResult]:
+    return repository.get_job_entry_points(target_job=request.target_job, max_steps=request.max_steps)
 
 
 @router.post('/resume/parse', response_model=ResumeParseResponse)
