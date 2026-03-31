@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AI 智能对话助手 - 基于 GLM 模型</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'SF Pro Text', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+            background: linear-gradient(145deg, #f6f9fc 0%, #eef2f5 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        /* 主容器：类似现代聊天应用卡片 */
+        .chat-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 90vh;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(0px);
+            border-radius: 32px;
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.25), 0 2px 6px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        /* 头部信息 */
+        .chat-header {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 18px 28px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .title-section h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #1a2a3a, #2c3e4e);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .title-section p {
+            font-size: 0.8rem;
+            color: #5a6e7c;
+            margin-top: 4px;
+        }
+
+        .model-badge {
+            background: #eef2ff;
+            padding: 6px 14px;
+            border-radius: 60px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #1e40af;
+            font-family: monospace;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        /* 消息区域 */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: #fafcfd;
+            scroll-behavior: smooth;
+        }
+
+        /* 自定义滚动条 */
+        .messages-area::-webkit-scrollbar {
+            width: 5px;
+        }
+        .messages-area::-webkit-scrollbar-track {
+            background: #e9ecef;
+            border-radius: 10px;
+        }
+        .messages-area::-webkit-scrollbar-thumb {
+            background: #b9c4ce;
+            border-radius: 10px;
+        }
+
+        /* 消息气泡通用 */
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+            animation: fadeSlideUp 0.25s ease-out;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            background: #eef2f9;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1rem;
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .message.user .avatar {
+            background: #2c3e4e;
+            color: white;
+        }
+
+        .message.assistant .avatar {
+            background: #d9e2ef;
+            color: #1f3a48;
+        }
+
+        .bubble {
+            background: white;
+            padding: 12px 18px;
+            border-radius: 24px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .bubble {
+            background: #2c3e4e;
+            color: white;
+            border-bottom-right-radius: 6px;
+        }
+
+        .message.assistant .bubble {
+            background: #ffffff;
+            color: #1e2a36;
+            border-bottom-left-radius: 6px;
+            border: 1px solid #e2edf2;
+        }
+
+        /* 打字指示器 */
+        .typing-indicator {
+            display: flex;
+            gap: 6px;
+            padding: 12px 18px;
+            background: #ffffff;
+            border-radius: 24px;
+            width: fit-content;
+            border: 1px solid #e2edf2;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: #9aaebf;
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 输入区域 */
+        .input-area {
+            background: white;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            padding: 20px 28px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            background: #f2f6f9;
+            border-radius: 32px;
+            padding: 8px 16px;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .input-wrapper:focus-within {
+            background: white;
+            border-color: #bdd3e4;
+            box-shadow: 0 0 0 3px rgba(44, 62, 78, 0.1);
+        }
+
+        textarea {
+            width: 100%;
+            border: none;
+            background: transparent;
+            resize: none;
+            font-family: inherit;
+            font-size: 0.95rem;
+            line-height: 1.4;
+            outline: none;
+            padding: 6px 0;
+            max-height: 140px;
+            color: #1f2f3a;
+        }
+        textarea::placeholder {
+            color: #8da0ae;
+            font-weight: 400;
+        }
+
+        button {
+            background: #2c3e4e;
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        button:hover:not(:disabled) {
+            background: #1f2f3c;
+            transform: scale(0.97);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        button:active {
+            transform: scale(0.96);
+        }
+        button:disabled {
+            background: #b9c4ce;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .stop-btn {
+            background: #9e2d2f;
+        }
+        .stop-btn:hover:not(:disabled) {
+            background: #7f2325;
+        }
+
+        .status-text {
+            font-size: 0.7rem;
+            color: #6c868e;
+            margin-left: 12px;
+        }
+
+        @media (max-width: 680px) {
+            .chat-container {
+                height: 95vh;
+                border-radius: 24px;
+            }
+            .messages-area {
+                padding: 16px;
+            }
+            .input-area {
+                padding: 16px;
+            }
+            .message {
+                max-width: 95%;
+            }
+            .title-section h1 {
+                font-size: 1.3rem;
+            }
+        }
+
+        .error-bubble {
+            background: #fff1f0;
+            border-left: 4px solid #e34f4f;
+            color: #b13a3a;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-header">
+        <div class="title-section">
+            <h1>✨ AI 智能伙伴</h1>
+            <p>基于 GLM 模型 · 流畅对话体验</p>
+        </div>
+        <div class="model-badge" id="modelLabel">加载配置中...</div>
+    </div>
+
+    <div class="messages-area" id="messagesContainer">
+        <!-- 欢迎消息由js动态生成，保证API信息展示 -->
+    </div>
+
+    <div class="input-area">
+        <div class="input-wrapper">
+            <textarea 
+                id="userInput" 
+                placeholder="输入您的问题，按 Ctrl+Enter 发送..." 
+                rows="1"
+            ></textarea>
+        </div>
+        <button id="sendBtn" class="send-action">✈️ 发送</button>
+        <button id="stopBtn" class="stop-btn" style="display: none;">⏹️ 停止</button>
+    </div>
+    <div style="padding: 8px 28px 16px 28px; font-size: 0.7rem; color: #94a3b0; text-align: center; border-top: none;">
+        💡 AI 思考需要几秒，请耐心等待 | 支持流式效果模拟
+    </div>
+</div>
+
+<script>
+    // ======================= 配置区域（用户提供的 API 信息） =======================
+    // 重要提示：直接硬编码API Key不安全，但根据用户提供“LLM_API_KEY=”为空字符串，
+    // 为演示可用，若需要真实key请在此填写。用户可以在浏览器开发者工具动态修改，本demo允许UI临时修改。
+    // 为了尊重用户配置，完全按照给定的环境变量含义使用。
+    // 您提供的配置：
+    // LLM_API_BASE_URL="https://aihubmix.com/v1"
+    // LLM_API_KEY= (空，但实际使用时应填入真实key)
+    // LLM_MODEL="coding-glm-5-free"
+    
+    // 默认配置 (建议用户如果有key，在这里填写，或者页面提供小按钮)
+    let API_CONFIG = {
+        baseURL: "https://aihubmix.com/v1",
+        apiKey: "sk-PHNhMDTobgukVxcsEa9219CdCc2e466e96568106D64d85F9",   // 用户未提供具体key，请填写有效key才能正常调用。这里留空展示错误友好提示。
+        model: "coding-glm-5-free"
+    };
+    
+    // 为了调试方便，同时也允许用户通过控制台修改变量，页面内增加一个简单的“设置”区域？但保持简洁，可以在UI上增加一个小的钥匙图标? 考虑到易用性，
+    // 在标题栏旁边增加一个可配置key的弹窗/或者设置一个输入框，防止key为空导致所有请求失败。
+    // 由于用户提供的原始LLM_API_KEY=空，意味着需要手动填写有效key。为了让网页立即可用，增加一个小巧的API KEY配置按钮 (不会影响美观)。
+    
+    // ---------- UI 辅助函数 ----------
+    const messagesContainer = document.getElementById('messagesContainer');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const modelLabelSpan = document.getElementById('modelLabel');
+    
+    let isWaitingResponse = false;      // 是否正在等待AI回复（防止并发）
+    let currentAbortController = null;   // 用于中止fetch请求
+    
+    // 消息数组 (用于保持上下文，OpenAI格式)
+    let conversationHistory = [];
+    
+    // 初始化显示模型和配置状态
+    function updateModelBadge() {
+        let keyStatus = API_CONFIG.apiKey && API_CONFIG.apiKey.trim() !== "" ? "🔑 已设置" : "⚠️ 未填Key";
+        modelLabelSpan.innerHTML = `${API_CONFIG.model} ${keyStatus}`;
+        if (!API_CONFIG.apiKey || API_CONFIG.apiKey.trim() === "") {
+            modelLabelSpan.style.background = "#fff0e0";
+            modelLabelSpan.style.color = "#b85c00";
+        } else {
+            modelLabelSpan.style.background = "#eef2ff";
+            modelLabelSpan.style.color = "#1e40af";
+        }
+    }
+    
+    // 添加消息到界面
+    function appendMessage(role, content, isError = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = role === 'user' ? '👤' : '🤖';
+        
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        if (isError) bubble.classList.add('error-bubble');
+        // 支持简单markdown风格的换行
+        bubble.innerHTML = content.replace(/\n/g, '<br>');
+        
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(bubble);
+        messagesContainer.appendChild(messageDiv);
+        // 滚动到底部
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return bubble;
+    }
+    
+    // 显示/隐藏打字指示器 (assistant的loading)
+    let typingIndicatorElement = null;
+    function showTypingIndicator() {
+        if (typingIndicatorElement) return;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message assistant';
+        wrapper.id = 'typingIndicatorWrapper';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = '🤖';
+        const indicatorDiv = document.createElement('div');
+        indicatorDiv.className = 'typing-indicator';
+        indicatorDiv.innerHTML = '<span></span><span></span><span></span>';
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(indicatorDiv);
+        messagesContainer.appendChild(wrapper);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        typingIndicatorElement = wrapper;
+    }
+    
+    function hideTypingIndicator() {
+        if (typingIndicatorElement) {
+            typingIndicatorElement.remove();
+            typingIndicatorElement = null;
+        }
+    }
+    
+    // 核心调用API (基于OpenAI Chat Completions格式, 支持流式: stream=true)
+    // 为了最佳体验，使用流式输出，实时展示文字。
+    async function sendMessageToAI(userMessageText) {
+        if (isWaitingResponse) {
+            appendMessage('assistant', "请等待当前回复完成后再发送新消息～", true);
+            return false;
+        }
+        
+        // 校验API Key (提示)
+        // if (!API_CONFIG.apiKey || API_CONFIG.apiKey.trim() === "") {
+        //     appendMessage('assistant', "❌ API Key 未配置。请在页面右上角点击「⚙️ 设置Key」填入有效的 API Key 后再试。\n\n（提示：你提供的环境变量 LLM_API_KEY 为空，需要填入真实密钥）", true);
+        //     return false;
+        // }
+        
+        // 添加用户消息到界面和历史
+        appendMessage('user', userMessageText);
+        conversationHistory.push({ role: 'user', content: userMessageText });
+        
+        // 准备请求体 (保持最近10条上下文，避免token过长)
+        const maxContext = 12;
+        let messagesToSend = conversationHistory.slice(-maxContext);
+        
+        const response = await fetch(`${API_CONFIG.baseURL}/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // 不再需要 Authorization 头，因为后端会添加
+            },
+            body: JSON.stringify(requestBody),
+            signal: currentAbortController.signal
+        });
+        
+        // 显示加载中指示器
+        showTypingIndicator();
+        isWaitingResponse = true;
+        sendBtn.disabled = true;
+        stopBtn.style.display = 'inline-flex';
+        userInput.disabled = true;
+        
+        // 准备abort controller
+        currentAbortController = new AbortController();
+        let fullContent = "";
+        let assistantBubble = null;     // 动态更新的气泡
+        
+        try {
+            const response = await fetch(`${API_CONFIG.baseURL}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_CONFIG.apiKey}`
+                },
+                body: JSON.stringify(requestBody),
+                signal: currentAbortController.signal
+            });
+            
+            if (!response.ok) {
+                let errorDetail = `HTTP ${response.status}`;
+                try {
+                    const errJson = await response.json();
+                    errorDetail = errJson.error?.message || JSON.stringify(errJson);
+                } catch(e) { /* 忽略 */ }
+                throw new Error(`API请求失败: ${response.status} - ${errorDetail}`);
+            }
+            
+            // 处理流式响应
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+            let isFirstChunk = true;
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop(); // 保留未完成行
+                
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine || trimmedLine === "data: [DONE]") continue;
+                    if (trimmedLine.startsWith("data: ")) {
+                        const jsonStr = trimmedLine.slice(6);
+                        try {
+                            const parsed = JSON.parse(jsonStr);
+                            const deltaContent = parsed.choices?.[0]?.delta?.content;
+                            if (deltaContent) {
+                                fullContent += deltaContent;
+                                // 更新或创建气泡
+                                if (!assistantBubble) {
+                                    // 首次收到内容时移除打字指示器并创建助手气泡
+                                    hideTypingIndicator();
+                                    const msgDiv = document.createElement('div');
+                                    msgDiv.className = 'message assistant';
+                                    const avatar = document.createElement('div');
+                                    avatar.className = 'avatar';
+                                    avatar.textContent = '🤖';
+                                    const bubble = document.createElement('div');
+                                    bubble.className = 'bubble';
+                                    msgDiv.appendChild(avatar);
+                                    msgDiv.appendChild(bubble);
+                                    messagesContainer.appendChild(msgDiv);
+                                    assistantBubble = bubble;
+                                }
+                                // 实时渲染内容
+                                assistantBubble.innerHTML = fullContent.replace(/\n/g, '<br>');
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            }
+                        } catch (err) {
+                            console.warn("JSON parse error", err, jsonStr);
+                        }
+                    }
+                }
+            }
+            
+            // 流结束，最终内容处理
+            hideTypingIndicator(); // 确保指示器消失
+            if (!assistantBubble && fullContent === "") {
+                // 如果没有任何内容，可能模型返回空，显示占位
+                appendMessage('assistant', "(无回复内容，请重试)", true);
+                fullContent = "(无回复内容)";
+            } else if (!assistantBubble && fullContent.length > 0) {
+                // 极端情况: 没有创建bubble但内容存在（一般不会），创建之
+                const finalMsg = document.createElement('div');
+                finalMsg.className = 'message assistant';
+                const avatar = document.createElement('div');
+                avatar.className = 'avatar';
+                avatar.textContent = '🤖';
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+                bubble.innerHTML = fullContent.replace(/\n/g, '<br>');
+                finalMsg.appendChild(avatar);
+                finalMsg.appendChild(bubble);
+                messagesContainer.appendChild(finalMsg);
+            }
+            
+            // 保存完整回复到历史
+            if (fullContent.trim() !== "") {
+                conversationHistory.push({ role: 'assistant', content: fullContent });
+            } else {
+                // 若为空推一条错误记录避免空
+                conversationHistory.push({ role: 'assistant', content: "[空响应]" });
+            }
+            
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                // 用户主动停止
+                if (assistantBubble) {
+                    assistantBubble.innerHTML += `<br><span style="color:#9e7a5c; font-size:0.8rem;"> ⏸️ [已停止生成]</span>`;
+                } else {
+                    appendMessage('assistant', `⏹️ 已停止生成。`, false);
+                }
+                // 保留已生成部分入历史
+                if (fullContent && fullContent.trim() !== "") {
+                    conversationHistory.push({ role: 'assistant', content: fullContent + " [停止]" });
+                }
+            } else {
+                console.error("AI调用错误:", error);
+                hideTypingIndicator();
+                let errMsg = `❌ 请求失败: ${error.message}`;
+                if (error.message.includes("APIKey") || error.message.includes("401") || error.message.includes("key")) {
+                    errMsg = `🔑 API Key 无效或未提供，请检查配置。\n详细信息: ${error.message}`;
+                } else if (error.message.includes("network")) {
+                    errMsg = `🌐 网络错误，请检查API地址或网络连接: ${API_CONFIG.baseURL}`;
+                }
+                appendMessage('assistant', errMsg, true);
+                // 不回存错误对话历史，但为了防止上下文错乱，可以选择添加错误占位但为了体验不加错误入历史
+            }
+        } finally {
+            // 清理状态
+            isWaitingResponse = false;
+            sendBtn.disabled = false;
+            stopBtn.style.display = 'none';
+            userInput.disabled = false;
+            userInput.focus();
+            currentAbortController = null;
+            hideTypingIndicator();
+            // 如果由于异常导致气泡未创建但指示器残留，再次清理
+            if (typingIndicatorElement) hideTypingIndicator();
+        }
+        return true;
+    }
+    
+    // 停止响应
+    function stopGeneration() {
+        if (currentAbortController && isWaitingResponse) {
+            currentAbortController.abort();
+            // 界面更新会在catch中处理，但额外反馈
+            if (typingIndicatorElement) hideTypingIndicator();
+            sendBtn.disabled = false;
+            stopBtn.style.display = 'none';
+            userInput.disabled = false;
+            isWaitingResponse = false;
+        }
+    }
+    
+    // 发送消息主入口
+    async function handleSend() {
+        const message = userInput.value.trim();
+        if (!message) return;
+        if (isWaitingResponse) {
+            appendMessage('assistant', "正在回复中，请稍后或点击停止再发送", true);
+            return;
+        }
+        userInput.value = '';
+        // 自适应高度重置
+        userInput.style.height = 'auto';
+        await sendMessageToAI(message);
+    }
+    
+    // 动态调整textarea高度
+    function autoResizeTextarea() {
+        userInput.style.height = 'auto';
+        userInput.style.height = Math.min(userInput.scrollHeight, 140) + 'px';
+    }
+    
+    // 欢迎消息与配置弹窗 (简易配置API Key)
+    function showApiKeyDialog() {
+        let currentKey = API_CONFIG.apiKey;
+        let newKey = prompt("🔐 请输入您的 API Key (用于调用 GLM 模型)\n当前Key: " + (currentKey ? "已设置(隐藏)" : "空"), currentKey);
+        if (newKey !== null) {
+            API_CONFIG.apiKey = newKey.trim();
+            updateModelBadge();
+            // 可选存储至 localStorage
+            localStorage.setItem('ai_api_key', API_CONFIG.apiKey);
+            appendMessage('assistant', `✅ API Key 已更新${API_CONFIG.apiKey ? "，可以开始对话啦" : "，但为空无法调用"}`, false);
+        }
+    }
+    
+    function showApiBaseDialog() {
+        let newBase = prompt("🌐 修改 API Base URL (通常保持默认)", API_CONFIG.baseURL);
+        if (newBase !== null && newBase.trim() !== "") {
+            API_CONFIG.baseURL = newBase.trim();
+            updateModelBadge();
+            localStorage.setItem('ai_base_url', API_CONFIG.baseURL);
+            appendMessage('assistant', `🔧 Base URL 已更新为 ${API_CONFIG.baseURL}`, false);
+        }
+    }
+    
+    // 初始化欢迎界面，加载本地存储配置
+    function loadStoredConfig() {
+        const storedKey = localStorage.getItem('ai_api_key');
+        const storedBase = localStorage.getItem('ai_base_url');
+        if (storedKey) API_CONFIG.apiKey = storedKey;
+        if (storedBase) API_CONFIG.baseURL = storedBase;
+        updateModelBadge();
+    }
+    
+    // 添加设置快捷栏（右上角增加两个小图标按钮）
+    function addSettingsButtons() {
+        const header = document.querySelector('.chat-header');
+        const settingsDiv = document.createElement('div');
+        settingsDiv.style.display = 'flex';
+        settingsDiv.style.gap = '8px';
+        settingsDiv.style.alignItems = 'center';
+        
+        const keyBtn = document.createElement('button');
+        keyBtn.textContent = '🔑 Key';
+        keyBtn.style.background = '#eef2f5';
+        keyBtn.style.color = '#2c3e4e';
+        keyBtn.style.padding = '5px 12px';
+        keyBtn.style.fontSize = '0.75rem';
+        keyBtn.style.boxShadow = 'none';
+        keyBtn.onclick = (e) => { e.preventDefault(); showApiKeyDialog(); };
+        
+        const urlBtn = document.createElement('button');
+        urlBtn.textContent = '⚙️ BaseURL';
+        urlBtn.style.background = '#eef2f5';
+        urlBtn.style.color = '#2c3e4e';
+        urlBtn.style.padding = '5px 12px';
+        urlBtn.style.fontSize = '0.75rem';
+        urlBtn.style.boxShadow = 'none';
+        urlBtn.onclick = (e) => { e.preventDefault(); showApiBaseDialog(); };
+        
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = '🗑️ 清空会话';
+        clearBtn.style.background = '#eef2f5';
+        clearBtn.style.color = '#9e2d2f';
+        clearBtn.style.padding = '5px 12px';
+        clearBtn.style.fontSize = '0.75rem';
+        clearBtn.onclick = (e) => {
+            e.preventDefault();
+            if (confirm('清空所有对话历史？')) {
+                conversationHistory = [];
+                messagesContainer.innerHTML = '';
+                initWelcomeMessage();
+                appendMessage('assistant', '✨ 对话历史已清空，重新开始吧～', false);
+            }
+        };
+        
+        settingsDiv.appendChild(keyBtn);
+        settingsDiv.appendChild(urlBtn);
+        settingsDiv.appendChild(clearBtn);
+        header.appendChild(settingsDiv);
+    }
+    
+    function initWelcomeMessage() {
+        const welcomeDiv = document.createElement('div');
+        welcomeDiv.className = 'message assistant';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = '🤖';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.innerHTML = `👋 你好！我是你的AI智能助手，底层使用 <strong>${API_CONFIG.model}</strong> 模型。<br><br>
+        请确保右上角已正确设置 <strong>API Key</strong>（点击🔑按钮）。<br>
+        你可以随意提问，编程、写作、知识问答都可以。发送消息开始对话吧！<br>
+        <span style="font-size:0.8rem;">💡 提示：支持流式打字效果，点击停止按钮可中断回复。</span>`;
+        welcomeDiv.appendChild(avatar);
+        welcomeDiv.appendChild(bubble);
+        messagesContainer.appendChild(welcomeDiv);
+    }
+    
+    // 绑定事件
+    function bindEvents() {
+        sendBtn.addEventListener('click', handleSend);
+        stopBtn.addEventListener('click', stopGeneration);
+        userInput.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+        userInput.addEventListener('input', autoResizeTextarea);
+    }
+    
+    // 启动
+    function init() {
+        loadStoredConfig();
+        bindEvents();
+        addSettingsButtons();
+        initWelcomeMessage();
+        updateModelBadge();
+        userInput.focus();
+    }
+    
+    init();
+</script>
+</body>
+</html>

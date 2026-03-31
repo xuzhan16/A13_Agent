@@ -29,6 +29,10 @@
           <span>当前模式</span>
           <strong id="heroMode">Rule</strong>
         </div>
+        <div class="hero-stat" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); cursor: pointer;" onclick="window.location.href='/chat'">
+          <span>💬 AI 顾问</span>
+          <strong style="font-size: 12px;">进入聊天</strong>
+        </div>
       </div>
     </header>
 
@@ -187,19 +191,8 @@
           </article>
         </div>
 
-        <section id="resultNavigatorSection" class="result-card navigator-card">
-          <div class="section-head">
-            <div>
-              <h2>结果入口</h2>
-              <p class="section-copy">生成报告后，可从这里快速进入各分析模块。</p>
-            </div>
-            <span id="resultNavigatorCount" class="badge">0/7</span>
-          </div>
-          <div id="resultNavigator" class="result-nav-grid empty-state">先生成职业报告，再从入口卡片跳转查看各部分结果。</div>
-        </section>
-
         <div class="result-grid two-col-results">
-          <section id="softSkillSection" class="result-card">
+          <section class="result-card">
             <div class="section-head">
               <h2>软素质显式画像</h2>
               <span id="softSkillCount" class="badge">0</span>
@@ -207,7 +200,7 @@
             <div id="softSkillOverview" class="soft-skill-grid empty-state">生成报告后，这里会展示 5 类软素质评分。</div>
           </section>
 
-          <section id="trendSection" class="result-card">
+          <section class="result-card">
             <div class="section-head">
               <div>
                 <h2>行业趋势分析</h2>
@@ -220,16 +213,15 @@
         </div>
 
         <div class="result-grid two-col-results">
-          <section id="followUpSection" class="result-card">
+          <section class="result-card">
             <div class="section-head">
               <h2>Agent 追问</h2>
               <span id="questionCount" class="badge">0</span>
             </div>
             <div id="followUpContainer" class="stack-list empty-state">先点击“生成追问”</div>
-            <div id="followUpAnswerHint" class="inline-note hidden">可在每个问题下方直接填写回答，系统会自动带入报告生成。</div>
           </section>
 
-          <section id="matchSection" class="result-card">
+          <section class="result-card">
             <div class="section-head">
               <h2>岗位匹配结果</h2>
               <span class="badge">Top 3</span>
@@ -238,7 +230,7 @@
           </section>
         </div>
 
-        <section id="evidenceSection" class="result-card evidence-card">
+        <section class="result-card evidence-card">
           <div class="section-head">
             <div>
               <h2>Evidence Trace</h2>
@@ -277,75 +269,28 @@
           </div>
         </section>
 
-        <section id="graphSection" class="result-card graph-card">
+        <section class="result-card graph-card">
           <div class="section-head graph-head">
             <div>
-              <h2>&#23703;&#20301;&#22270;&#35889;</h2>
-              <p class="section-copy">&#25903;&#25345;&#20174;&#20840;&#23616;&#22270;&#35889;&#20999;&#25442;&#21040;&#24403;&#21069;&#23398;&#29983;&#30340;&#20010;&#24615;&#21270;&#23376;&#22270;&#65292;&#28857;&#20987;&#33410;&#28857;&#25110;&#36830;&#32447;&#26597;&#30475;&#23703;&#20301;&#35814;&#24773;&#12289;&#22478;&#24066;&#20998;&#24067;&#12289;&#25216;&#33021;&#35201;&#27714;&#21644;&#36716;&#23703;&#35777;&#25454;&#12290;</p>
+              <h2>岗位图谱</h2>
+              <p class="section-copy">支持从全局图谱切换到当前学生的个性化子图，查看路径、缺口技能和证据来源。</p>
             </div>
             <div class="graph-head-actions">
-              <button id="viewPersonalGraphBtn" class="secondary-btn">&#26597;&#30475;&#25105;&#30340;&#22270;&#35889;</button>
-              <button id="viewGlobalGraphBtn" class="ghost-btn" disabled>&#24674;&#22797;&#20840;&#23616;&#22270;&#35889;</button>
-              <a href="/neo4j-explorer" class="ghost-btn" target="_blank" rel="noreferrer">&#39640;&#32423;&#25506;&#32034;</a>
+              <button id="viewPersonalGraphBtn" class="secondary-btn">查看我的图谱</button>
+              <button id="viewGlobalGraphBtn" class="ghost-btn" disabled>恢复全局图谱</button>
             </div>
           </div>
           <div class="legend graph-legend">
-            <span><i class="dot dot-job"></i>&#23703;&#20301;&#26063;</span>
-            <span><i class="dot dot-stage"></i>&#25216;&#33021; / &#38454;&#27573;</span>
-            <span><i class="line line-vertical"></i>&#32437;&#21521;&#36335;&#24452;</span>
-            <span><i class="line line-transfer"></i>&#36716;&#23703;&#36335;&#24452;</span>
+            <span><i class="dot dot-job"></i>岗位族</span>
+            <span><i class="dot dot-stage"></i>技能 / 阶段</span>
+            <span><i class="line line-vertical"></i>纵向路径</span>
+            <span><i class="line line-transfer"></i>转岗路径</span>
           </div>
-          <div class="graph-toolbar">
-            <label class="graph-toolbar-field graph-search-field">
-              <span>&#33410;&#28857;&#25628;&#32034;</span>
-              <input id="graphSearchInput" type="search" placeholder="&#36755;&#20837;&#23703;&#20301;&#25110;&#25216;&#33021;" />
-            </label>
-            <button id="graphSearchBtn" class="ghost-btn">&#23450;&#20301;</button>
-            <label class="graph-toolbar-field">
-              <span>&#22478;&#24066;&#31579;&#36873;</span>
-              <select id="graphCityFilter">
-                <option value="">&#20840;&#37096;&#22478;&#24066;</option>
-              </select>
-            </label>
-            <label class="graph-toolbar-field">
-              <span>&#34892;&#19994;&#31579;&#36873;</span>
-              <select id="graphIndustryFilter">
-                <option value="">&#20840;&#37096;&#34892;&#19994;</option>
-              </select>
-            </label>
-            <button id="graphNeighborBtn" class="ghost-btn" disabled>&#19968;&#38454;&#37051;&#23621;</button>
-            <button id="graphFilterResetBtn" class="ghost-btn">&#37325;&#32622;</button>
-          </div>
-          <div id="graphToolbarHint" class="inline-note">&#25903;&#25345;&#25628;&#32034;&#33410;&#28857;&#12289;&#31579;&#36873;&#22478;&#24066; / &#34892;&#19994;&#65292;&#28857;&#20987;&#33410;&#28857;&#21518;&#33258;&#21160;&#23637;&#24320;&#19968;&#38454;&#37051;&#23621;&#12290;</div>
-          <div id="personalGraphSummary" class="personal-graph-summary empty-state">&#20808;&#29983;&#25104;&#32844;&#19994;&#25253;&#21578;&#65292;&#20877;&#28857;&#20987;&#8220;&#26597;&#30475;&#25105;&#30340;&#22270;&#35889;&#8221;&#12290;</div>
-          <div class="graph-workbench">
-            <div class="graph-canvas-shell">
-              <div class="graph-canvas-frame">
-                <svg id="graphSvg" class="graph-canvas" viewBox="0 0 1320 760" preserveAspectRatio="xMidYMid meet"></svg>
-              </div>
-            </div>
-            <aside class="graph-detail-panel">
-              <div class="section-head minor">
-                <h3>&#22270;&#35889;&#35814;&#24773;</h3>
-                <span id="graphDetailMeta" class="badge">idle</span>
-              </div>
-              <div id="graphDetailBody" class="graph-detail-body empty-state">&#28857;&#20987;&#22270;&#35889;&#20013;&#30340;&#33410;&#28857;&#25110;&#36830;&#32447;&#65292;&#26597;&#30475;&#23703;&#20301;&#22522;&#30784;&#20449;&#24687;&#12289;&#22478;&#24066;&#20998;&#24067;&#12289;&#25216;&#33021;&#35201;&#27714;&#21644;&#36716;&#23703;&#35777;&#25454;&#12290;</div>
-            </aside>
-          </div>
+          <div id="personalGraphSummary" class="personal-graph-summary empty-state">先生成职业报告，再点击“查看我的图谱”。</div>
+          <svg id="graphSvg" class="graph-canvas" viewBox="0 0 1100 620" preserveAspectRatio="xMidYMid meet"></svg>
         </section>
 
-        <section id="graphInsightSection" class="result-card">
-          <div class="section-head">
-            <div>
-              <h2>&#22270;&#35889;&#27934;&#23519;</h2>
-              <p class="section-copy">&#22522;&#20110; Neo4j &#23454;&#26102;&#26597;&#35810;&#24403;&#21069;&#23398;&#29983;&#30340;&#30456;&#20851;&#23703;&#20301;&#12289;&#20837;&#21475;&#36335;&#24452;&#12289;&#23703;&#20301;&#24433;&#21709;&#21147;&#21644;&#32858;&#31867;&#32467;&#26524;&#12290;</p>
-            </div>
-            <span id="graphInsightMeta" class="badge">pending</span>
-          </div>
-          <div id="graphInsightPanel" class="trend-panel empty-state">&#29983;&#25104;&#25253;&#21578;&#21518;&#65292;&#36825;&#37324;&#20250;&#23637;&#31034;&#22270;&#35889;&#27934;&#23519;&#12290;</div>
-        </section>
-
-        <section id="reportSection" class="result-card report-card">
+        <section class="result-card report-card">
           <div class="section-head">
             <h2>职业规划报告</h2>
             <span id="reportModeBadge" class="badge">template</span>

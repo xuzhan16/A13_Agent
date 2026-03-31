@@ -1,4 +1,4 @@
-﻿Metadata-Version: 2.4
+Metadata-Version: 2.4
 Name: career-planning-agent
 Version: 0.1.0
 Summary: Evidence-driven career planning agent backend.
@@ -8,33 +8,49 @@ Requires-Dist: fastapi<1.0,>=0.110
 Requires-Dist: uvicorn[standard]<1.0,>=0.29
 Requires-Dist: pydantic<3.0,>=1.10
 Requires-Dist: python-multipart<1.0,>=0.0.9
+Requires-Dist: PyPDF2<4.0,>=3.0
 Requires-Dist: xlrd<3.0,>=2.0
 Requires-Dist: httpx<1.0,>=0.27
+Requires-Dist: neo4j<6.0,>=5.15
 Provides-Extra: dev
 Requires-Dist: pytest<9.0,>=8.0; extra == "dev"
 
 # Career Planning Agent
 
-面向“服务外包创新创业大赛”的大学生职业规划智能体项目。
+A FastAPI-based career planning system for university students. The project combines:
 
-当前版本已经完成四个阶段：
+- structured resume parsing
+- student profiling
+- job matching with evidence trace
+- career path planning
+- industry trend analysis
+- Neo4j knowledge graph queries
+- optional LLM augmentation
 
-- 第一阶段：后端主链路与 Agent 编排骨架
-- 第二阶段：真实 `xls` 数据清洗、岗位画像库与岗位图谱构建
-- 第三阶段：简历解析、多轮追问、可插拔 LLM 增强
-- 第四阶段：前端 Demo 页面、图谱可视化、报告导出、完整演示链路
+The current runtime knowledge source is **Neo4j only**.
 
-## 当前能力
+## Key Capabilities
 
-- 岗位知识库构建
-- 学生画像抽取与增强
-- 多维人岗匹配
-- 职业路径与换岗路径展示
-- 多轮追问生成
-- 职业报告生成与 Markdown 导出
-- Demo 页面可直接演示整条业务链路
+- Build job requirement profiles from cleaned job data
+- Build student profiles from resume text, projects, internships, campus activities, and follow-up answers
+- Score student-job fit with explicit evidence chains
+- Generate growth paths and transfer paths from Neo4j
+- Render personalized subgraphs for the current student
+- Surface industry trend analysis and missing-skill heat
+- Export reports as Markdown
 
-## 项目结构
+## Architecture
+
+```text
+FastAPI API
+  -> CareerPlanningOrchestrator
+  -> StudentProfiler / Matching / PathPlanner / ReportBuilder / IndustryTrend
+  -> KnowledgeRepository (abstract contract)
+  -> Neo4jKnowledgeRepository (runtime implementation)
+  -> Neo4j
+```
+
+## Project Structure
 
 ```text
 backend/
@@ -52,58 +68,104 @@ backend/
 data/
   knowledge_base/
 docs/
+neo4j/
 tests/
 ```
 
-## 如何跑通
+## Quick Start
 
-### 1. 安装依赖
+### 1. Install dependencies
 
 ```bash
 pip install -e .
 ```
 
-### 2. 基于真实岗位数据构建知识库
+### 2. Build cleaned knowledge-base artifacts
 
 ```bash
-python -m backend.app.etl.build_knowledge_base --input "D:/200-study/A13_Agent/20260226105856_457.xls" --output-dir "D:/200-study/A13_Agent/data/knowledge_base"
+python -m backend.app.etl.build_knowledge_base --input "<path-to-job-xls>" --output-dir "D:/200-study/A13_Agent/data/knowledge_base"
 ```
 
-### 3. 可选：配置 LLM 增强
+### 3. Start Neo4j
 
-复制 `.env.example` 为 `.env`，按需填写：
+```bash
+docker compose up -d neo4j neo4j-init
+```
+
+### 4. Import data into Neo4j
+
+```bash
+python -m backend.app.etl.import_to_neo4j --drop-existing
+```
+
+### 5. Configure `.env`
+
+Copy `.env.example` to `.env` and fill in:
 
 ```text
-ENABLE_LLM=true
-LLM_API_BASE_URL=https://your-openai-compatible-endpoint/v1
-LLM_API_KEY=your_key
-LLM_MODEL=your_model
+APP_NAME=Career Planning Agent
+APP_ENV=dev
+APP_HOST=127.0.0.1
+APP_PORT=8000
+LOG_LEVEL=INFO
+DEFAULT_TOP_K_MATCHES=3
+NEO4J_URI=bolt://127.0.0.1:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+NEO4J_DATABASE=neo4j
+ENABLE_LLM=false
+LLM_API_BASE_URL=
+LLM_API_KEY=
+LLM_MODEL=
 LLM_TIMEOUT_SECONDS=30
-KNOWLEDGE_BASE_DIR=data/knowledge_base
 ```
 
-如果不配置，系统会自动以规则模式运行，仍然可以完整演示。
+Notes:
+- Neo4j must be available before the app starts.
+- When `ENABLE_LLM=false`, the system still works in rule-based mode.
+- When `ENABLE_LLM=true`, LLM is used only as an enhancement layer, not the main scoring engine.
 
-### 4. 启动服务
+### 6. Start the app
 
 ```bash
 uvicorn backend.app.main:app --reload
 ```
 
-### 5. 打开页面
+### 7. Open the demo
 
-- Demo 页面：[http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-- Swagger 文档：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+- Main demo: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+- Neo4j explorer: [http://127.0.0.1:8000/neo4j-explorer](http://127.0.0.1:8000/neo4j-explorer)
+- Swagger docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-## Demo 页面怎么玩
+## Demo Flow
 
-1. 点击“加载示例”，快速填充比赛演示数据
-2. 或者先上传 `txt/md/docx` 简历，点击“解析文件”
-3. 点击“生成追问”，展示 Agent 的访谈能力
-4. 点击“生成职业报告”，展示画像、匹配、图谱和报告
-5. 点击“导出 Markdown”或“导出 JSON”保存结果
+1. Upload or parse a resume
+2. Review structured resume extraction and autofill results
+3. Generate follow-up questions
+4. Generate the career report
+5. Inspect match evidence trace
+6. Inspect soft-skill scoring and industry trend analysis
+7. Switch from the global graph to the personalized subgraph
+8. Export Markdown
 
-## 主要接口
+## Neo4j Graph Model
+
+The runtime graph contains:
+
+- Node labels: `Job`, `Skill`, `Ability`, `City`, `Industry`
+- Relationship types: `TRANSFER_TO`, `VERTICAL_TO`, `REQUIRES`, `DEPENDS_ON`, `LOCATED_IN`, `BELONGS_TO`, `RELATED_TO`
+
+It supports:
+
+- forward and reverse path search
+- personalized transfer-path filtering by student skills
+- related-job recommendation by skill overlap
+- job clusters and influence ranking
+- personalized subgraph retrieval for the current student
+
+## Main APIs
+
+### Planning APIs
 
 - `GET /api/v1/planning/job-families`
 - `GET /api/v1/planning/job-graph`
@@ -112,55 +174,51 @@ uvicorn backend.app.main:app --reload
 - `POST /api/v1/planning/report`
 - `POST /api/v1/planning/report/export-markdown`
 
-## 真实数据构建结果
+### Graph APIs
 
-当前用你的 `xls` 构建后得到：
+- `POST /api/v1/planning/graph/transfer-paths`
+- `POST /api/v1/planning/graph/personalized-paths`
+- `POST /api/v1/planning/graph/path-evidence`
+- `POST /api/v1/planning/graph/personalized-subgraph`
+- `POST /api/v1/planning/graph/related-jobs`
+- `POST /api/v1/planning/graph/entry-points`
+- `GET /api/v1/planning/graph/job-clusters`
+- `GET /api/v1/planning/graph/job-influence`
 
-- 原始数据：`9958`
-- 去重后：`9178`
-- 成功归并到 10 个核心岗位族：`3759`
-- 已过滤非核心/低相关岗位：`5419`
+## Testing
 
-生成产物位于 `data/knowledge_base/`：
+### Fast validation
 
-- `standardized_jobs.jsonl`
-- `job_profiles.json`
-- `job_graph.json`
-- `build_report.json`
+```bash
+python -m compileall backend tests
+```
 
-## 后续优化点
+### Targeted tests
 
-### 业务效果优化
+```bash
+pytest tests/test_neo4j_repository.py tests/test_student_profiler_context.py -q
+```
 
-- 增加真实学生简历评测集，校验画像准确率和匹配准确率
-- 引入岗位技能权重学习，减少当前模板型权重的主观性
-- 让行动计划更贴近不同岗位的真实求职节奏
-- 为报告增加“证据引用段落”，提升答辩说服力
+### Optional integration tests
 
-### Agent 能力优化
+The repository includes integration tests that expect a live Neo4j service. Enable them with:
 
-- 将追问从单轮问题生成升级为真正的多轮状态机
-- 让 Agent 根据回答动态刷新画像和推荐岗位
-- 增加面试模拟、简历改写、岗位解释等子能力
+```bash
+set RUN_APP_INTEGRATION_TESTS=1
+pytest -q
+```
 
-### 前端展示优化
+## Current Notes
 
-- 增加岗位画像详情抽屉和技能差距雷达图
-- 增加一键切换“示例学生案例”
-- 增加 PPT 风格的答辩演示模式
-- 增加 PDF 导出与打印样式
+- The runtime knowledge source is Neo4j only.
+- `file_knowledge.py` and `in_memory_knowledge.py` have been removed.
+- LLM extraction in `StudentProfilerService` is constrained by Neo4j vocabularies.
+- `PathPlannerService` now uses Neo4j path queries and related-job recommendations.
+- The main page can request and render a personalized graph subgraph.
 
-### 架构与知识图谱优化
+## Recommended Next Steps
 
-- 当前图谱用 `job_graph.json + API` 即可满足比赛演示和当前规模需求
-- 后续完全可以升级为“知识图谱”方案
-
-可行升级路线：
-
-1. 继续沿用当前 JSON 图谱结构，先增加更多节点类型：岗位、技能、证书、行业、城市、课程
-2. 将图谱存储切换到 Neo4j 或图数据库，支持复杂多跳查询
-3. 增加图谱构建规则与图算法，如技能相似度、路径推荐、中心性分析
-4. 做成“图谱 + 向量检索 + Agent”混合架构，提升解释性与检索能力
-
-换句话说，**知识图谱后续优化完全可以加进去，而且是很自然的升级方向**。只是以你当前比赛阶段看，先用轻量 JSON 图谱更稳、更容易交付。
-
+- Add richer evidence drill-down for soft-skill cards
+- Add export for personalized graph images or PDF
+- Add stronger evaluation datasets for resume structuring and matching calibration
+- Optionally add MCP tools for LLM-initiated Neo4j lookups in a later stage
